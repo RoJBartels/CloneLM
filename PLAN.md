@@ -108,25 +108,27 @@ parallel the whole time** and **F deferred**. Realistic concurrency after 0a:
 
 ---
 
-## Phase 0 — Scaffolding & infrastructure ☐
+## Phase 0 — Scaffolding & infrastructure ☑
 
-### Phase 0a — Contracts (GATE: do first, single agent) ☐
+### Phase 0a — Contracts (GATE: do first, single agent) ☑
 **Goal:** the shared foundation every track builds against. Nothing fans out until this lands.
-- ☐ Repo layout: `backend/`, `frontend/`, `docker-compose.yml`, `.env.example`, README.
-- ☐ DB schema + **single first migration** covering the full data model above.
-- ☐ `domain/ports` interfaces: `EmbeddingProvider`, `LLMProvider`, `TTSProvider`, `VectorStore`, repositories.
-- ☐ Composition root (`config.py` + `api/deps.py`) binding ports → (stub) adapters from env.
-- ☐ API/OpenAPI contract: endpoint shapes for notebooks, sources, chat, studio, notes (stub handlers OK).
-- ☐ FastAPI app factory + module-router registration pattern in `main.py`.
+- ☑ Repo layout: `backend/`, `frontend/`, `docker-compose.yml`, `.env.example`, README.
+- ☑ DB schema + **single first migration** covering the full data model above (9 tables + pgvector + HNSW index).
+- ☑ `domain/ports` interfaces: `EmbeddingProvider`, `LLMProvider`, `TTSProvider`, `VectorStore`, 8 repositories.
+- ☑ Composition root (`config.py` + `api/deps.py`) binding ports → adapters from env (fakes when no key).
+- ☑ API/OpenAPI contract: 13 endpoint paths (notebooks live; sources/chat/studio/notes/audio = contract stubs).
+- ☑ FastAPI app factory + module-router registration pattern in `main.py`.
 
-**Done when:** backend starts, OpenAPI schema is published, ports + migration exist; tracks can begin against the contract.
+**Done when:** backend starts, OpenAPI schema is published, ports + migration exist; tracks can begin against the contract. ✓
 
-### Phase 0b — Infra & skeletons (alongside 0a) ☐
-- ☐ docker-compose: Postgres + pgvector; Alembic wired.
-- ☐ React + Vite + TS skeleton; typed API client from the OpenAPI contract; layout shell.
-- ☐ Health endpoint green; empty notebook list renders.
+### Phase 0b — Infra & skeletons (alongside 0a) ☑
+- ☑ docker-compose: Postgres + pgvector; Alembic wired.
+- ☑ React + Vite + TS skeleton; typed API client (mirrors contract); three-pane layout shell (German) + empty state.
+- ☑ Health endpoint green; backend health indicator in the UI.
 
-**Done when:** `docker-compose up` + backend + frontend run; health check green.
+**Done when:** `docker-compose up` + backend + frontend run; health check green. ✓
+
+**Phase 0 verification:** 9 backend pytest passing (contracts, health, notebook CRUD vs live Postgres); `ruff` clean; live uvicorn smoke (health/create/list/501-stub); frontend `npm run build` passes. Known gap: **`ANTHROPIC_API_KEY` not set** → real LLM deferred; fake LLM path active. Execution note: background sub-agents did not survive the host process this session (see review) — track-execution mechanics to be decided before fan-out.
 
 ## Phase 1 — Source ingestion ☐
 **Track A** · after 0a · parallel with B/C/D.
