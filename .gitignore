@@ -1,0 +1,37 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.log
+
+# --- Node / frontend ---
+node_modules/
+frontend/dist/
+frontend/.vite/
+*.local
+
+# --- Env & secrets ---
+.env
+.env.*
+!.env.example
+
+# --- Data / models / uploads ---
+backend/storage/
+backend/.uploads/
+models/
+*.bin
+*.safetensors
+
+# --- Editor / OS ---
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# --- Postgres volume (if mounted locally) ---
+.pgdata/

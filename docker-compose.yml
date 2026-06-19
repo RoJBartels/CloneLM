@@ -1,0 +1,23 @@
+# CloneLM local infrastructure.
+# Phase 0b: Postgres + pgvector. Backend/frontend run on the host during
+# development (uv / vite) for fast reload; this file owns the data layer.
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: clonelm-db
+    environment:
+      POSTGRES_USER: clonelm
+      POSTGRES_PASSWORD: clonelm
+      POSTGRES_DB: clonelm
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U clonelm -d clonelm"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata:
