@@ -1,0 +1,57 @@
+@import "tailwindcss";
+
+/*
+ * CloneLM design palette — exposed as Tailwind v4 theme variables so the
+ * Phase 3 three-pane UX can reuse them (e.g. bg-src-300, text-studio-600).
+ * Colours mirror design/_gen_excalidraw.py + design/_gen_empty.py.
+ */
+@theme {
+  /* Quellen / Track A — blues */
+  --color-src-100: #dbe4ff;
+  --color-src-200: #a5d8ff;
+  --color-src-400: #4a9eed;
+  --color-src-600: #1971c2;
+
+  /* Studio — purples */
+  --color-studio-100: #e5dbff;
+  --color-studio-200: #d0bfff;
+  --color-studio-400: #8b5cf6;
+  --color-studio-600: #6741d9;
+
+  /* Notes / citations — amber */
+  --color-note-100: #fff3bf;
+  --color-note-500: #f59e0b;
+
+  /* Status "bereit" — green */
+  --color-ok-100: #b2f2bb;
+  --color-ok-600: #2f9e44;
+
+  /* PDF badge / offline — red */
+  --color-danger-100: #ffc9c9;
+  --color-danger-500: #ef4444;
+
+  /* Neutral chrome (greys used across the design) */
+  --color-chrome-50: #f8f9fa;
+  --color-chrome-100: #f1f3f5;
+  --color-chrome-200: #e9ecef;
+  --color-chrome-300: #ced4da;
+  --color-chrome-400: #adb5bd;
+  --color-chrome-500: #868e96;
+  --color-chrome-600: #757575;
+  --color-chrome-700: #495057;
+  --color-chrome-900: #1e1e1e;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    Helvetica, Arial, sans-serif;
+  color: var(--color-chrome-900);
+  background-color: #ffffff;
+}
