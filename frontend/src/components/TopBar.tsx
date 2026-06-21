@@ -5,7 +5,13 @@ import { api } from "../api/client";
 type HealthState = "checking" | "online" | "offline";
 
 /** App top bar: logo + notebook title + backend status + actions. */
-export default function TopBar({ notebookTitle }: { notebookTitle: string }) {
+export default function TopBar({
+  notebookTitle,
+  onNewNotebook,
+}: {
+  notebookTitle: string;
+  onNewNotebook: () => void;
+}) {
   const [health, setHealth] = useState<HealthState>("checking");
 
   useEffect(() => {
@@ -40,13 +46,24 @@ export default function TopBar({ notebookTitle }: { notebookTitle: string }) {
       </span>
 
       <div className="ml-auto flex items-center gap-2">
-        <button className="rounded-md bg-src-200 px-3 py-1.5 text-sm text-src-600 ring-1 ring-src-600">
+        <button
+          onClick={onNewNotebook}
+          className="rounded-md bg-src-200 px-3 py-1.5 text-sm text-src-600 ring-1 ring-src-600"
+        >
           + Neues Notebook
         </button>
-        <button className="rounded-md bg-white px-3 py-1.5 text-sm text-chrome-700 ring-1 ring-chrome-400">
+        <button
+          disabled
+          title="Demnächst verfügbar"
+          className="cursor-not-allowed rounded-md bg-white px-3 py-1.5 text-sm text-chrome-700 opacity-60 ring-1 ring-chrome-400"
+        >
           Teilen
         </button>
-        <button className="rounded-md bg-white px-3 py-1.5 text-sm text-chrome-700 ring-1 ring-chrome-400">
+        <button
+          disabled
+          title="Demnächst verfügbar"
+          className="cursor-not-allowed rounded-md bg-white px-3 py-1.5 text-sm text-chrome-700 opacity-60 ring-1 ring-chrome-400"
+        >
           Einstellungen
         </button>
       </div>

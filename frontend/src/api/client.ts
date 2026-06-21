@@ -1,12 +1,19 @@
 /**
- * Typed API client (Phase 0b). Talks to the FastAPI backend; in dev the Vite
- * proxy forwards /api and /health to :8000. Phase 3 (Track C) fills in the
- * remaining endpoints — their typed signatures are declared here already.
+ * Typed API client. Talks to the FastAPI backend; in dev the Vite proxy
+ * forwards /api and /health to :8000. Phase 3 (Track C) fills in the
+ * remaining endpoints — multipart source upload, SSE chat streaming, and
+ * notes/studio CRUD.
  */
 import type {
+  AddSourceInput,
+  ChatRequest,
+  ChatStreamHandlers,
+  Conversation,
   Health,
   Message,
   Note,
+  NoteCreate,
+  NoteUpdate,
   Notebook,
   Source,
   StudioKind,
@@ -28,12 +35,129 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
   return (await res.json()) as T;
 }
 
-const notImplemented = (what: string) => {
-  throw new Error(`${what} is not implemented yet (Phase 3)`);
-};
+/** Multipart requests must NOT set Content-Type manually — the browser sets
+ * the correct boundary. */
+async function reqForm<T>(path: string, form: FormData, init?: RequestInit): Promise<T> {
+  const res = await fetch(BASE + path, {
+    method: "POST",
+    body: form,
+    ...init,
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`${res.status} ${res.statusText}${detail ? `: ${detail}` : ""}`);
+  }
+  if (res.status === 204) return undefined as T;
+  return (await res.json()) as T;
+}
+
+function addSourceForm(input: AddSourceInput): FormData {
+  const form = new FormData();
+  form.append("type", input.type);
+  if (input.title) form.append("title", input.title);
+  if (input.type === "paste") form.append("content", input.content);
+  if (input.type === "url") form.append("url", input.url);
+  if (input.type === "file") form.append("file", input.file);
+  return form;
+}
+
+/**
+ * Consume the chat SSE stream. Uses fetch + ReadableStream reader (not
+ * EventSource, since EventSource cannot POST). Parses `event: <name>` /
+ * `data: <json>` blocks separated by blank lines per the SSE wire format and
+ * dispatches to the matching handler.
+ */
+async function streamChat(
+  notebookId: string,
+  body: ChatRequest,
+  handlers: ChatStreamHandlers,
+  signal?: AbortSignal,
+): Promise<void> {
+  const res = await fetch(`${BASE}/api/notebooks/${notebookId}/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    signal,
+  });
+  if (!res.ok || !res.body) {
+    const detail = await res.text().catch(() => "");
+    const message = `${res.status} ${res.statusText}${detail ? `: ${detail}` : ""}`;
+    handlers.onError?.({ message });
+    throw new Error(message);
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  const dispatch = (eventName: string, data: string) => {
+    if (!data) return;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(data);
+    } catch {
+      return;
+    }
+    switch (eventName) {
+      case "meta":
+        handlers.onMeta?.(parsed as Parameters<NonNullable<ChatStreamHandlers["onMeta"]>>[0]);
+        break;
+      case "token":
+        handlers.onToken?.(parsed as Parameters<NonNullable<ChatStreamHandlers["onToken"]>>[0]);
+        break;
+      case "citation":
+        handlers.onCitation?.(
+          parsed as Parameters<NonNullable<ChatStreamHandlers["onCitation"]>>[0],
+        );
+        break;
+      case "done":
+        handlers.onDone?.(parsed as Parameters<NonNullable<ChatStreamHandlers["onDone"]>>[0]);
+        break;
+      case "error":
+        handlers.onError?.(parsed as Parameters<NonNullable<ChatStreamHandlers["onError"]>>[0]);
+        break;
+      default:
+        break;
+    }
+  };
+
+  const processBuffer = () => {
+    // SSE events are separated by a blank line; each event may have multiple
+    // "field: value" lines. We only care about "event:" and "data:".
+    let sepIndex: number;
+    while ((sepIndex = buffer.indexOf("\n\n")) !== -1) {
+      const rawEvent = buffer.slice(0, sepIndex);
+      buffer = buffer.slice(sepIndex + 2);
+
+      let eventName = "message";
+      const dataLines: string[] = [];
+      for (const line of rawEvent.split("\n")) {
+        if (line.startsWith("event:")) {
+          eventName = line.slice(6).trim();
+        } else if (line.startsWith("data:")) {
+          dataLines.push(line.slice(5).trim());
+        }
+      }
+      dispatch(eventName, dataLines.join("\n"));
+    }
+  };
+
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      processBuffer();
+    }
+    buffer += decoder.decode();
+    processBuffer();
+  } finally {
+    reader.releaseLock();
+  }
+}
 
 export const api = {
-  // --- live in Phase 0 ---
+  // --- notebooks ---
   getHealth: () => req<Health>("/health"),
   listNotebooks: () => req<Notebook[]>("/api/notebooks"),
   createNotebook: (title: string) =>
@@ -42,17 +166,51 @@ export const api = {
       body: JSON.stringify({ title }),
     }),
   getNotebook: (id: string) => req<Notebook>(`/api/notebooks/${id}`),
+  updateNotebook: (id: string, title: string) =>
+    req<Notebook>(`/api/notebooks/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ title }),
+    }),
+  deleteNotebook: (id: string) =>
+    req<void>(`/api/notebooks/${id}`, { method: "DELETE" }),
+
+  // --- sources ---
   listSources: (notebookId: string) =>
     req<Source[]>(`/api/notebooks/${notebookId}/sources`),
+  getSource: (id: string) => req<Source>(`/api/sources/${id}`),
+  deleteSource: (id: string) => req<void>(`/api/sources/${id}`, { method: "DELETE" }),
+  addSource: (notebookId: string, input: AddSourceInput) =>
+    reqForm<Source>(`/api/notebooks/${notebookId}/sources`, addSourceForm(input)),
+
+  // --- chat ---
+  streamChat,
+  listConversations: (notebookId: string) =>
+    req<Conversation[]>(`/api/notebooks/${notebookId}/conversations`),
+  listMessages: (conversationId: string) =>
+    req<Message[]>(`/api/conversations/${conversationId}/messages`),
+
+  // --- notes ---
   listNotes: (notebookId: string) =>
     req<Note[]>(`/api/notebooks/${notebookId}/notes`),
+  createNote: (notebookId: string, body: NoteCreate) =>
+    req<Note>(`/api/notebooks/${notebookId}/notes`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  updateNote: (id: string, body: NoteUpdate) =>
+    req<Note>(`/api/notes/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  deleteNote: (id: string) => req<void>(`/api/notes/${id}`, { method: "DELETE" }),
+
+  // --- studio ---
   listStudioOutputs: (notebookId: string) =>
     req<StudioOutput[]>(`/api/notebooks/${notebookId}/studio`),
-
-  // --- declared for Phase 3; not wired yet ---
-  addSource: (_notebookId: string): Promise<Source> => notImplemented("addSource"),
-  sendChat: (_notebookId: string, _message: string): Promise<Message> =>
-    notImplemented("sendChat"),
-  generateStudio: (_notebookId: string, _kind: StudioKind): Promise<StudioOutput> =>
-    notImplemented("generateStudio"),
+  getStudioOutput: (id: string) => req<StudioOutput>(`/api/studio/${id}`),
+  generateStudio: (notebookId: string, kind: StudioKind) =>
+    req<StudioOutput>(`/api/notebooks/${notebookId}/studio`, {
+      method: "POST",
+      body: JSON.stringify({ kind }),
+    }),
 };

@@ -1,22 +1,24 @@
-"""Sources router — CONTRACT STUB (Track A · Ingestion, Phase 1).
+"""Sources router (Track A · Ingestion, Phase 1).
 
-Publishes the endpoint shapes so the frontend and OpenAPI client are stable.
-Track A implements parsing -> chunking -> embedding and the multipart file
-upload variant. The repositories and EmbeddingProvider it needs already exist.
+``add_source`` accepts multipart/form-data (so file uploads and paste/url
+share one endpoint) and runs the full parse -> chunk -> embed -> persist
+pipeline inline within the request via ``IngestionService``.
 """
 from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 
-from app.api.deps import get_source_repo
-from app.domain.models import Source, SourceCreate
-from app.domain.ports.repositories import SourceRepository
+from app.api.deps import get_chunk_repo, get_embedder, get_notebook_repo, get_source_repo
+from app.config import get_settings
+from app.domain.models import Source, SourceType
+from app.domain.ports.embeddings import EmbeddingProvider
+from app.domain.ports.repositories import ChunkRepository, NotebookRepository, SourceRepository
+from app.services.ingestion.service import IngestionService
+from app.shared.errors import UnsupportedSourceError, ValidationError
 
 router = APIRouter(prefix="/api", tags=["sources"])
-
-_TODO = "Not implemented yet — Track A (Ingestion, Phase 1)."
 
 
 @router.post(
@@ -24,9 +26,55 @@ _TODO = "Not implemented yet — Track A (Ingestion, Phase 1)."
     response_model=Source,
     status_code=status.HTTP_201_CREATED,
 )
-def add_source(notebook_id: uuid.UUID, body: SourceCreate) -> Source:
-    """Add a source (paste/url here; file upload arrives as multipart in Track A)."""
-    raise HTTPException(status.HTTP_501_NOT_IMPLEMENTED, _TODO)
+async def add_source(
+    notebook_id: uuid.UUID,
+    type: SourceType = Form(...),
+    title: str | None = Form(None),
+    content: str | None = Form(None),
+    url: str | None = Form(None),
+    file: UploadFile | None = File(None),
+    notebook_repo: NotebookRepository = Depends(get_notebook_repo),
+    source_repo: SourceRepository = Depends(get_source_repo),
+    chunk_repo: ChunkRepository = Depends(get_chunk_repo),
+    embedder: EmbeddingProvider = Depends(get_embedder),
+) -> Source:
+    """Add a source (file/paste/url) and ingest it inline: parse -> chunk ->
+    embed -> persist. Returns the Source with status=ready or status=error
+    (parse/embed failures do not 500 — they surface via the status field)."""
+    if not notebook_repo.get(notebook_id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Notebook not found")
+
+    file_bytes: bytes | None = None
+    filename: str | None = None
+    if type == SourceType.file:
+        if file is None:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "`file` is required for type=file")
+        filename = file.filename
+        file_bytes = await file.read()
+
+    settings = get_settings()
+    service = IngestionService(
+        source_repo=source_repo,
+        chunk_repo=chunk_repo,
+        embedder=embedder,
+        chunk_tokens=settings.chunk_tokens,
+        chunk_overlap=settings.chunk_overlap,
+        chunk_strategy=settings.chunk_strategy,
+    )
+    try:
+        return service.add_source(
+            notebook_id=notebook_id,
+            type=type,
+            title=title,
+            content=content,
+            url=url,
+            filename=filename,
+            file_bytes=file_bytes,
+        )
+    except UnsupportedSourceError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+    except ValidationError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
 
 
 @router.get("/notebooks/{notebook_id}/sources", response_model=list[Source])

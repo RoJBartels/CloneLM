@@ -1,0 +1,16 @@
+Photosynthesis — a short primer
+
+Photosynthesis is the process by which green plants, algae, and some bacteria
+convert light energy into chemical energy stored in glucose. It takes place
+mainly in the chloroplasts, which contain the green pigment chlorophyll.
+
+The overall reaction combines carbon dioxide and water, using light energy, to
+produce glucose and oxygen. The process has two main stages: the light-dependent
+reactions, which occur in the thylakoid membranes and produce ATP and NADPH; and
+the light-independent reactions (the Calvin cycle), which occur in the stroma and
+fix carbon dioxide into sugar.
+
+This file exists as an UNRELATED second source: it lets us demonstrate notebook
+isolation (it must never leak into a different notebook's answers) and grounded
+refusal (a question about photosynthesis must be refused in a notebook that only
+contains the FontAwesome reference, and vice versa).

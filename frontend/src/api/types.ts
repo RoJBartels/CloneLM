@@ -40,6 +40,12 @@ export interface Citation {
   page: number | null;
 }
 
+export interface Conversation {
+  id: string;
+  notebook_id: string;
+  created_at: string;
+}
+
 export type MessageRole = "user" | "assistant";
 
 export interface Message {
@@ -80,8 +86,80 @@ export interface Note {
   updated_at: string;
 }
 
+export interface NoteCreate {
+  title: string;
+  content?: string;
+  origin?: NoteOrigin;
+  source_ref?: string | null;
+}
+
+export interface NoteUpdate {
+  title?: string;
+  content?: string;
+}
+
 export interface Health {
   status: string;
   db: string;
   version: string;
 }
+
+// --- chat (SSE) ---
+
+export interface ChatRequest {
+  message: string;
+  conversation_id?: string | null;
+  source_ids?: string[] | null;
+}
+
+export interface ChatMetaEvent {
+  conversation_id: string;
+  user_message_id: string;
+}
+
+export interface ChatDoneEvent {
+  message_id: string;
+  conversation_id: string;
+  refused: boolean;
+}
+
+export interface ChatErrorEvent {
+  message: string;
+}
+
+export interface ChatTokenEvent {
+  text: string;
+}
+
+export type ChatStreamHandlers = {
+  onMeta?: (meta: ChatMetaEvent) => void;
+  onToken?: (token: ChatTokenEvent) => void;
+  onCitation?: (citation: Citation) => void;
+  onDone?: (done: ChatDoneEvent) => void;
+  onError?: (error: ChatErrorEvent) => void;
+};
+
+// --- source creation (multipart) ---
+
+export interface AddSourcePasteInput {
+  type: "paste";
+  title?: string;
+  content: string;
+}
+
+export interface AddSourceUrlInput {
+  type: "url";
+  title?: string;
+  url: string;
+}
+
+export interface AddSourceFileInput {
+  type: "file";
+  title?: string;
+  file: File;
+}
+
+export type AddSourceInput =
+  | AddSourcePasteInput
+  | AddSourceUrlInput
+  | AddSourceFileInput;
