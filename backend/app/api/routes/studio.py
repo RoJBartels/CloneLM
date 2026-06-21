@@ -1,8 +1,10 @@
-"""Studio router — CONTRACT STUB (Track E · Studio, Phase 4).
+"""Studio router (Track E · Studio, Phase 4).
 
 Generates grounded, cited artifacts (summary / faq / study_guide / briefing /
-timeline) by reusing Track B's grounded-generation core. Implemented after that
-core lands.
+timeline) by reusing Track B's grounded-generation core (``GroundedGenerator``)
+via ``StudioService``. Retrieval is scoped to the notebook (isolation) and uses
+a broad top_k since Studio artifacts summarize the whole notebook, not a single
+question; synthesis uses the heavier configured model.
 """
 from __future__ import annotations
 
@@ -10,13 +12,23 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.api.deps import get_studio_repo
+from app.api.deps import (
+    get_embedder,
+    get_llm,
+    get_notebook_repo,
+    get_studio_repo,
+    get_vector_store,
+)
+from app.config import get_settings
 from app.domain.models import StudioOutput, StudioRequest
-from app.domain.ports.repositories import StudioOutputRepository
+from app.domain.ports.embeddings import EmbeddingProvider
+from app.domain.ports.llm import LLMProvider
+from app.domain.ports.repositories import NotebookRepository, StudioOutputRepository
+from app.domain.ports.vector_store import VectorStore
+from app.services.chat import GroundedGenerator
+from app.services.studio import MIN_STUDIO_TOP_K, StudioService
 
 router = APIRouter(prefix="/api", tags=["studio"])
-
-_TODO = "Not implemented yet — Track E (Studio, Phase 4)."
 
 
 @router.post(
@@ -24,8 +36,33 @@ _TODO = "Not implemented yet — Track E (Studio, Phase 4)."
     response_model=StudioOutput,
     status_code=status.HTTP_201_CREATED,
 )
-def generate_studio(notebook_id: uuid.UUID, body: StudioRequest) -> StudioOutput:
-    raise HTTPException(status.HTTP_501_NOT_IMPLEMENTED, _TODO)
+def generate_studio(
+    notebook_id: uuid.UUID,
+    body: StudioRequest,
+    notebook_repo: NotebookRepository = Depends(get_notebook_repo),
+    studio_repo: StudioOutputRepository = Depends(get_studio_repo),
+    vector_store: VectorStore = Depends(get_vector_store),
+    embedder: EmbeddingProvider = Depends(get_embedder),
+    llm: LLMProvider = Depends(get_llm),
+) -> StudioOutput:
+    if notebook_repo.get(notebook_id) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Notebook not found.")
+
+    settings = get_settings()
+    generator = GroundedGenerator(
+        vector_store,
+        embedder,
+        llm,
+        default_top_k=max(settings.retrieval_top_k, MIN_STUDIO_TOP_K),
+        max_tokens=settings.llm_max_tokens,
+    )
+    service = StudioService(
+        generator,
+        studio_repo,
+        heavy_model=settings.llm_model_heavy,
+        top_k=max(settings.retrieval_top_k, MIN_STUDIO_TOP_K),
+    )
+    return service.generate(notebook_id=notebook_id, kind=body.kind)
 
 
 @router.get("/notebooks/{notebook_id}/studio", response_model=list[StudioOutput])
