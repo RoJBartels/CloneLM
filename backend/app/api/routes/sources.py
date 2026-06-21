@@ -48,7 +48,7 @@ async def add_source(
     filename: str | None = None
     if type == SourceType.file:
         if file is None:
-            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "`file` is required for type=file")
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "`file` is required for type=file")
         filename = file.filename
         file_bytes = await file.read()
 
@@ -72,9 +72,9 @@ async def add_source(
             file_bytes=file_bytes,
         )
     except UnsupportedSourceError as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
     except ValidationError as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
 
 
 @router.get("/notebooks/{notebook_id}/sources", response_model=list[Source])
