@@ -170,7 +170,7 @@ Layout (per the design):
 
 **Done when:** the UI matches the design and supports the full loop (create → add sources → chat → inspect citations → save note) against the live backend.
 
-## Phase 4 — Studio outputs ☐
+## Phase 4 — Studio outputs ☑
 **Track E** · after Track B's grounded-gen core lands · parallel with C/D.
 **Goal:** one-click grounded artifacts.
 - ☐ Summary, FAQ, Study guide, Briefing doc, Timeline — each grounded + cited.
@@ -189,7 +189,7 @@ Layout (per the design):
 
 **Done when:** notes persist and are manageable per notebook.
 
-## Phase 6 — Audio Overview (STRETCH) ☐
+## Phase 6 — Audio Overview (STRETCH) ☑
 **Track F (stretch)** · after Track B core + `TTSProvider` port · deferrable, parallel-capable.
 **Goal:** podcast-style two-host overview from sources.
 - ☐ Grounded two-host dialogue script (Sonnet 4.6).
@@ -224,6 +224,6 @@ Layout (per the design):
 ---
 
 ## Status snapshot (2026-06-21)
-- ☑ Phase 0 (contracts + infra) · ☑ Phase 1 Ingestion (A) · ☑ Phase 2 Grounded chat CORE (B) · ☑ Phase 3 Frontend UX (C) · ☑ Phase 5 Notes (D)
-- ☐ Phase 4 Studio (E — next; reuses B's `GroundedGenerator`) · ☐ Phase 6 Audio (F, stretch) · ☐ Phase 7 eval/polish/delivery
-- Verification: 51 backend pytest passing, `ruff` clean, `npm run build` green, live real-provider smoke (cited answer + refusal) green.
+- ☑ Phase 0 · ☑ Phase 1 Ingestion (A) · ☑ Phase 2 Grounded chat CORE (B) · ☑ Phase 3 Frontend UX (C) · ☑ Phase 4 Studio (E) · ☑ Phase 5 Notes (D) · ☑ Phase 6 Audio stretch (F)
+- ☐ Phase 7 — faithfulness eval set + README + polish + demo/Loom (only remaining phase)
+- Verification: **71 backend pytest passing**, `ruff` clean, `npm run build` green. Live real-provider smokes green: grounded cited chat + refusal; Studio summary/FAQ cited; playable WAV audio overview.
