@@ -130,7 +130,7 @@ parallel the whole time** and **F deferred**. Realistic concurrency after 0a:
 
 **Phase 0 verification:** 9 backend pytest passing (contracts, health, notebook CRUD vs live Postgres); `ruff` clean; live uvicorn smoke (health/create/list/501-stub); frontend `npm run build` passes. Known gap: **`ANTHROPIC_API_KEY` not set** → real LLM deferred; fake LLM path active. Execution note: background sub-agents did not survive the host process this session (see review) — track-execution mechanics to be decided before fan-out.
 
-## Phase 1 — Source ingestion ☐
+## Phase 1 — Source ingestion ☑
 **Track A** · after 0a · parallel with B/C/D.
 **Goal:** add sources and turn them into searchable, embedded chunks.
 - ☐ Endpoints: create notebook; add source via file upload (PDF, txt/md), pasted text, URL.
@@ -141,7 +141,7 @@ parallel the whole time** and **F deferred**. Realistic concurrency after 0a:
 
 **Done when:** uploading a PDF yields ready chunks with embeddings; counts visible via API.
 
-## Phase 2 — Grounded chat with citations (CORE) ☐
+## Phase 2 — Grounded chat with citations (CORE) ☑
 **Track B** · after 0a · parallel with A/C/D · publishes the reusable grounded-generation core for Studio (E).
 **Goal:** the heart of the product — faithful, cited Q&A.
 - ☐ Retrieval: vector search scoped to notebook, top-k; (optional) lightweight rerank.
@@ -153,7 +153,7 @@ parallel the whole time** and **F deferred**. Realistic concurrency after 0a:
 
 **Done when:** asking an in-source question returns a cited answer; an out-of-source question is refused.
 
-## Phase 3 — Frontend core UX ☐
+## Phase 3 — Frontend core UX ☑
 **Track C** · after 0a · parallel from start against the OpenAPI mock; integrate when endpoints are live.
 **Design source of truth:** [`design/CloneLM-frontend.excalidraw`](design/CloneLM-frontend.excalidraw) (main view) and [`design/CloneLM-empty.excalidraw`](design/CloneLM-empty.excalidraw) (empty state). **UI copy is German.** The design color-maps regions to backend tracks (Quellen→A, Chat→B, Studio→E, Notes→D).
 **Goal:** reproduce the designed three-pane NotebookLM experience.
@@ -180,7 +180,7 @@ Layout (per the design):
 
 **Done when:** each artifact generates from real sources with citations.
 
-## Phase 5 — Saved notes ☐
+## Phase 5 — Saved notes ☑
 **Track D** · after 0a · near-independent CRUD, parallel from start.
 **Goal:** capture answers/artifacts.
 - ☐ Save a chat answer or Studio output as a note; manual notes too.
@@ -218,3 +218,12 @@ Layout (per the design):
 - **2026-06-19** — Faithfulness is architectural (RAG + mandatory citations + refusal), not model-size driven.
 - **2026-06-19** — Execution: contracts-first (Phase 0a gate, single agent) then parallel tracks A–F; agents work in separate git worktrees, one folder per track, contracts frozen during a sprint.
 - **2026-06-19** — Frontend design is fixed by `design/CloneLM-*.excalidraw` (German UI, three-pane layout + two modals + empty state); it is the source of truth for Track C.
+- **2026-06-21** — Execution mechanics: background sub-agents/worktrees were unavailable in the session, so Tracks A–D ran as **parallel foreground sub-agents** against the frozen Phase-0 contracts (user decision). Cross-track contracts fixed at fan-out: source add = multipart form; chat = SSE (meta/token/citation/done/error).
+- **2026-06-21** — AI realism: real **bge-m3** (local) + real **Claude Haiku 4.5** enabled. Live faithfulness verified end-to-end: in-source question → grounded, cited German answer; out-of-source question → explicit refusal, zero citations. 51 backend tests green; frontend build green.
+
+---
+
+## Status snapshot (2026-06-21)
+- ☑ Phase 0 (contracts + infra) · ☑ Phase 1 Ingestion (A) · ☑ Phase 2 Grounded chat CORE (B) · ☑ Phase 3 Frontend UX (C) · ☑ Phase 5 Notes (D)
+- ☐ Phase 4 Studio (E — next; reuses B's `GroundedGenerator`) · ☐ Phase 6 Audio (F, stretch) · ☐ Phase 7 eval/polish/delivery
+- Verification: 51 backend pytest passing, `ruff` clean, `npm run build` green, live real-provider smoke (cited answer + refusal) green.
