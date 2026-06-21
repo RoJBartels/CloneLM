@@ -208,17 +208,21 @@ class GroundedGenerator:
 def _parse_structured(text: str) -> tuple[str, list[dict]]:
     """Parse the structured-output JSON into (answer, raw_citations).
 
-    Tolerant of a non-JSON response (e.g. a provider that ignored the schema):
-    returns the raw text as the answer with no citations, which the caller will
-    treat as a refusal.
+    Tolerant of a malformed response. The structured-output JSON can be
+    *truncated* when a long artifact (e.g. a study guide) exhausts ``max_tokens``
+    mid-string — ``json.loads`` then raises, and we must NOT fall back to storing
+    the raw ``{"answer": ...}`` wrapper verbatim (that surfaces in the UI as raw
+    JSON with literal ``\\n`` escapes). Instead we salvage the ``answer`` field
+    (and any complete citation objects) from the partial JSON. Only when nothing
+    can be salvaged do we return the raw text (the caller treats it as a refusal).
     """
     try:
         payload = json.loads(text)
     except (json.JSONDecodeError, TypeError):
-        return text, []
+        return _salvage_truncated(text)
 
     if not isinstance(payload, dict):
-        return text, []
+        return _salvage_truncated(text)
 
     answer = payload.get("answer", "")
     if not isinstance(answer, str):
@@ -230,3 +234,67 @@ def _parse_structured(text: str) -> tuple[str, list[dict]]:
     citations = [c for c in citations if isinstance(c, dict)]
 
     return answer, citations
+
+
+def _salvage_truncated(text: str) -> tuple[str, list[dict]]:
+    """Best-effort recovery of (answer, citations) from malformed/truncated JSON.
+
+    Extracts the value of the ``"answer"`` key as a proper (un-escaped) string by
+    decoding the JSON string token that starts after ``"answer":``. If the token
+    was cut off (no closing quote because generation hit ``max_tokens``), we
+    decode everything up to the end. Citations are recovered only from a complete
+    ``"citations": [...]`` array; a truncated array is dropped (we never fabricate
+    half-formed citations). Returns the raw text unchanged if no answer is found.
+    """
+    key = '"answer"'
+    pos = text.find(key)
+    if pos == -1:
+        return text, []
+    # Find the opening quote of the string value after the colon.
+    colon = text.find(":", pos + len(key))
+    if colon == -1:
+        return text, []
+    open_q = text.find('"', colon + 1)
+    if open_q == -1:
+        return text, []
+
+    answer = _decode_json_string_body(text, open_q + 1)
+
+    # Recover a complete citations array wherever it appears (key order in the
+    # JSON object is not guaranteed — it may precede or follow "answer").
+    citations: list[dict] = []
+    cpos = text.find('"citations"')
+    if cpos != -1:
+        arr_start = text.find("[", cpos)
+        if arr_start != -1:
+            arr_end = text.find("]", arr_start)
+            if arr_end != -1:
+                try:
+                    parsed = json.loads(text[arr_start : arr_end + 1])
+                except json.JSONDecodeError:
+                    parsed = []
+                if isinstance(parsed, list):
+                    citations = [c for c in parsed if isinstance(c, dict)]
+
+    return answer, citations
+
+
+def _decode_json_string_body(text: str, start: int) -> str:
+    """Decode a JSON string value starting at ``start`` (just past the opening
+    quote), tolerating a missing closing quote (truncation). Honors JSON escape
+    sequences so ``\\n`` becomes a real newline, etc."""
+    i = start
+    n = len(text)
+    while i < n and text[i] != '"':
+        # Skip an escaped character so an escaped quote doesn't end the scan.
+        i += 2 if text[i] == "\\" and i + 1 < n else 1
+    body = text[start:i]  # exclusive of closing quote (or to EOF if truncated)
+    try:
+        # Re-wrap in quotes and let json decode the escapes (\n, \", \uXXXX...).
+        return json.loads(f'"{body}"')
+    except json.JSONDecodeError:
+        # A trailing dangling backslash from truncation breaks decoding; drop it.
+        try:
+            return json.loads(f'"{body.rstrip(chr(92))}"')
+        except json.JSONDecodeError:
+            return body

@@ -54,7 +54,7 @@ def generate_studio(
         embedder,
         llm,
         default_top_k=max(settings.retrieval_top_k, MIN_STUDIO_TOP_K),
-        max_tokens=settings.llm_max_tokens,
+        max_tokens=settings.studio_max_tokens,
     )
     service = StudioService(
         generator,

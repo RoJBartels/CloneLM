@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     llm_model: str = "claude-haiku-4-5"
     llm_model_heavy: str = "claude-sonnet-4-6"
     llm_max_tokens: int = 1024
+    # Studio artifacts (study guide, briefing, …) are long-form; a chat-sized
+    # budget truncates them mid-JSON, dropping content + citations. Give Studio
+    # synthesis its own, larger budget.
+    studio_max_tokens: int = 4096
 
     # --- Embeddings provider selection ---
     embedding_provider: str = "bge_m3_local"  # bge_m3_local | fake
