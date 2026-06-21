@@ -26,28 +26,50 @@ function ArtifactText({
 }) {
   const byMarker = new Map(citations.map((c) => [c.marker, c]));
   const parts = text.split(/(\[\d+\])/g);
+  const inlineMarkers = new Set(
+    Array.from(text.matchAll(/\[(\d+)\]/g), (m) => Number(m[1])),
+  );
+  // Citations the model did not reference inline still need a click-through to
+  // their source span; surface them in a footer so no evidence is unreachable.
+  const orphanCitations = citations.filter((c) => !inlineMarkers.has(c.marker));
   return (
-    <p className="whitespace-pre-wrap text-sm text-chrome-900">
-      {parts.map((part, i) => {
-        const m = part.match(/^\[(\d+)\]$/);
-        if (m) {
-          const marker = Number(m[1]);
-          const citation = byMarker.get(marker);
-          if (citation) {
-            return (
-              <button
-                key={i}
-                onClick={() => onCiteClick(citation)}
-                className="mx-0.5 inline rounded bg-note-100 px-1.5 py-0.5 text-xs font-semibold text-amber-800 ring-1 ring-note-500 hover:bg-amber-200"
-              >
-                [{marker}]
-              </button>
-            );
+    <div>
+      <p className="whitespace-pre-wrap text-sm text-chrome-900">
+        {parts.map((part, i) => {
+          const m = part.match(/^\[(\d+)\]$/);
+          if (m) {
+            const marker = Number(m[1]);
+            const citation = byMarker.get(marker);
+            if (citation) {
+              return (
+                <button
+                  key={i}
+                  onClick={() => onCiteClick(citation)}
+                  className="mx-0.5 inline rounded bg-note-100 px-1.5 py-0.5 text-xs font-semibold text-amber-800 ring-1 ring-note-500 hover:bg-amber-200"
+                >
+                  [{marker}]
+                </button>
+              );
+            }
           }
-        }
-        return <span key={i}>{part}</span>;
-      })}
-    </p>
+          return <span key={i}>{part}</span>;
+        })}
+      </p>
+      {orphanCitations.length > 0 && (
+        <p className="mt-1 flex flex-wrap items-center gap-1 text-xs text-chrome-500">
+          <span>Belege:</span>
+          {orphanCitations.map((c) => (
+            <button
+              key={c.id}
+              onClick={() => onCiteClick(c)}
+              className="rounded bg-note-100 px-1.5 py-0.5 text-xs font-semibold text-amber-800 ring-1 ring-note-500 hover:bg-amber-200"
+            >
+              [{c.marker}]
+            </button>
+          ))}
+        </p>
+      )}
+    </div>
   );
 }
 
