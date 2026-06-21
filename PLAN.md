@@ -208,6 +208,43 @@ Layout (per the design):
 
 **Done when:** eval passes, docs complete, demo recorded. ✓ (eval + docs done; recording is the human step)
 
+## Phase 8 — Frontend E2E test & post-launch fixes ☑
+**Convergence** · browser-driven E2E test of the live app (browser-use) over the **real**
+stack (Anthropic + bge-m3), then fixes for what it surfaced.
+**Test artifacts:** [`design/frontend-test-plan.md`](design/frontend-test-plan.md) ·
+[`design/frontend-test-report.md`](design/frontend-test-report.md). Scenarios S0–S7:
+empty-state gating, paste ingestion → `bereit`, grounded cited chat, Beleg-Ansicht
+click-through, refusal, Studio artifact + save-as-note, note CRUD. North star (cited answer
++ traceable evidence + refusal) verified end-to-end.
+
+**Findings & fixes (each committed atomically on `fix/sse-rendering-and-studio-citations`):**
+- **F3 — chat stuck on "…" (critical).** The frontend SSE parser split events on `"\n\n"`,
+  but sse-starlette delimits events with CRLF (`"\r\n\r\n"`), which contains no `"\n\n"` → no
+  event was ever dispatched. Fix: normalize CRLF/CR→LF before splitting
+  ([`frontend/src/api/client.ts`](frontend/src/api/client.ts)). Live-verified.
+- **F1 — Study Guide rendered as raw JSON.** Long artifacts exhausted `max_tokens` (1024)
+  mid-JSON; `json.loads` failed and the raw `{"answer":…}` wrapper (literal `\n`, 0 citations)
+  was stored. Fix: tolerant salvage parser
+  ([`services/chat/grounding.py`](backend/app/services/chat/grounding.py)) **+** a
+  Studio-specific budget `studio_max_tokens=4096`
+  ([`config.py`](backend/app/config.py) + [`api/routes/studio.py`](backend/app/api/routes/studio.py)).
+  Live-verified: clean markdown with a citation.
+- **F2 — summary/briefing citations unreachable.** The shared prompt asked for citations in
+  the structured array but never inline, so prose kinds omitted `[n]` and no chip rendered.
+  Fix: prompt now requires inline markers + bidirectional consistency
+  ([`services/chat/prompts.py`](backend/app/services/chat/prompts.py)); **+** a deterministic
+  "Belege:" footer for any citation lacking an inline marker
+  ([`ChatPane.tsx`](frontend/src/components/ChatPane.tsx) + [`StudioPane.tsx`](frontend/src/components/StudioPane.tsx)).
+
+**Verification:** `ruff` clean · **73 backend pytest passing** · frontend `tsc` clean · live
+in-browser: S3 (cited answer) · chat citation → Beleg-Ansicht · S5 (refusal) · study-guide
+clean render.
+**Observation (out of scope, not fixed):** a backend reload re-seeds demo `Studio-*`
+notebooks (notebook-list clutter) — flagged for separate triage.
+
+**Done when:** the E2E loop renders correctly in a real browser and the three findings are
+fixed + verified. ✓
+
 ---
 
 ## Decisions log
@@ -220,10 +257,11 @@ Layout (per the design):
 - **2026-06-19** — Frontend design is fixed by `design/CloneLM-*.excalidraw` (German UI, three-pane layout + two modals + empty state); it is the source of truth for Track C.
 - **2026-06-21** — Execution mechanics: background sub-agents/worktrees were unavailable in the session, so Tracks A–D ran as **parallel foreground sub-agents** against the frozen Phase-0 contracts (user decision). Cross-track contracts fixed at fan-out: source add = multipart form; chat = SSE (meta/token/citation/done/error).
 - **2026-06-21** — AI realism: real **bge-m3** (local) + real **Claude Haiku 4.5** enabled. Live faithfulness verified end-to-end: in-source question → grounded, cited German answer; out-of-source question → explicit refusal, zero citations. 51 backend tests green; frontend build green.
+- **2026-06-21** — Frontend E2E test (browser-use) over the real stack surfaced 3 bugs, all fixed on `fix/sse-rendering-and-studio-citations` (atomic commits): chat SSE not rendering (CRLF vs `\n\n` parser), Studio study-guide stored as raw truncated JSON (tolerant parser + larger Studio token budget), and citations without inline markers being unreachable (prompt requires inline markers + UI "Belege:" fallback). Diagnosed by 3 parallel agents in isolated worktrees. See **Phase 8**.
 
 ---
 
 ## Status snapshot (2026-06-21) — ALL PHASES COMPLETE
-- ☑ Phase 0 · ☑ Phase 1 Ingestion (A) · ☑ Phase 2 Grounded chat CORE (B) · ☑ Phase 3 Frontend UX (C) · ☑ Phase 4 Studio (E) · ☑ Phase 5 Notes (D) · ☑ Phase 6 Audio stretch (F) · ☑ Phase 7 eval/docs/polish
-- Verification: **73 backend pytest passing**, `ruff` clean (app/tests/scripts), `npm run build` green. Live real-provider results: grounded cited chat + refusal; Studio summary/FAQ cited; playable WAV audio overview; **faithfulness eval 4/4** (`scripts/faithfulness_demo.py`).
+- ☑ Phase 0 · ☑ Phase 1 Ingestion (A) · ☑ Phase 2 Grounded chat CORE (B) · ☑ Phase 3 Frontend UX (C) · ☑ Phase 4 Studio (E) · ☑ Phase 5 Notes (D) · ☑ Phase 6 Audio stretch (F) · ☑ Phase 7 eval/docs/polish · ☑ Phase 8 E2E test & fixes
+- Verification: **73 backend pytest passing**, `ruff` clean (app/tests/scripts), frontend `tsc` + `npm run build` green. Live real-provider results: grounded cited chat + refusal; Studio summary/FAQ cited; playable WAV audio overview; **faithfulness eval 4/4** (`scripts/faithfulness_demo.py`). Browser-use E2E (S0–S7) passing after the Phase 8 fixes (chat SSE render · study-guide clean render · citation reachability).
 - Remaining human step: record the Loom / submit the agent session for delivery.
