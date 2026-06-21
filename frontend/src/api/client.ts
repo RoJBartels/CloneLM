@@ -124,6 +124,19 @@ async function streamChat(
   const processBuffer = () => {
     // SSE events are separated by a blank line; each event may have multiple
     // "field: value" lines. We only care about "event:" and "data:".
+    //
+    // Per the SSE spec a line may end with CRLF, CR, or LF. sse-starlette emits
+    // CRLF (so events are delimited by "\r\n\r\n"), which contains no "\n\n" —
+    // splitting on "\n\n" alone would never match and no event would ever be
+    // dispatched. Normalize all line endings to LF before parsing. A trailing
+    // lone "\r" is held back (it may be the first half of a CRLF split across
+    // two reads) so we never turn one CRLF into a spurious blank line.
+    let trailingCR = "";
+    if (buffer.endsWith("\r")) {
+      trailingCR = "\r";
+      buffer = buffer.slice(0, -1);
+    }
+    buffer = buffer.replace(/\r\n|\r/g, "\n") + trailingCR;
     let sepIndex: number;
     while ((sepIndex = buffer.indexOf("\n\n")) !== -1) {
       const rawEvent = buffer.slice(0, sepIndex);
