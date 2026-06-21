@@ -198,15 +198,15 @@ Layout (per the design):
 
 **Done when:** a notebook produces a playable, source-grounded audio overview.
 
-## Phase 7 — Faithfulness eval, polish, delivery ☐
+## Phase 7 — Faithfulness eval, polish, delivery ☑
 **Convergence** · after tracks merge · not parallel.
 **Goal:** prove the north star and ship the demo.
-- ☐ Lightweight groundedness check (verify cited chunks support claims) — optional second pass.
-- ☐ Small eval set: in-source (must answer+cite) vs out-of-source (must refuse).
-- ☐ README: setup, architecture, design decisions (esp. faithfulness + provider abstraction).
-- ☐ Demo prep + agent session / Loom for submission.
+- ☐ Lightweight groundedness check (verify cited chunks support claims) — optional second pass (not implemented; refusal already covers the empty/uncited cases).
+- ☑ Small eval set: in-source (must answer+cite) vs out-of-source (must refuse) — offline `tests/test_faithfulness_eval.py` (CI-safe) + live `scripts/faithfulness_demo.py` (real providers, 4/4).
+- ☑ README: setup, architecture, design decisions (faithfulness + provider abstraction), run + eval steps.
+- ☑ Demo prep: bundled sample sources + one-command live faithfulness demo. (Recording the Loom / submitting the agent session is the human delivery step.)
 
-**Done when:** eval passes, docs complete, demo recorded.
+**Done when:** eval passes, docs complete, demo recorded. ✓ (eval + docs done; recording is the human step)
 
 ---
 
@@ -223,7 +223,7 @@ Layout (per the design):
 
 ---
 
-## Status snapshot (2026-06-21)
-- ☑ Phase 0 · ☑ Phase 1 Ingestion (A) · ☑ Phase 2 Grounded chat CORE (B) · ☑ Phase 3 Frontend UX (C) · ☑ Phase 4 Studio (E) · ☑ Phase 5 Notes (D) · ☑ Phase 6 Audio stretch (F)
-- ☐ Phase 7 — faithfulness eval set + README + polish + demo/Loom (only remaining phase)
-- Verification: **71 backend pytest passing**, `ruff` clean, `npm run build` green. Live real-provider smokes green: grounded cited chat + refusal; Studio summary/FAQ cited; playable WAV audio overview.
+## Status snapshot (2026-06-21) — ALL PHASES COMPLETE
+- ☑ Phase 0 · ☑ Phase 1 Ingestion (A) · ☑ Phase 2 Grounded chat CORE (B) · ☑ Phase 3 Frontend UX (C) · ☑ Phase 4 Studio (E) · ☑ Phase 5 Notes (D) · ☑ Phase 6 Audio stretch (F) · ☑ Phase 7 eval/docs/polish
+- Verification: **73 backend pytest passing**, `ruff` clean (app/tests/scripts), `npm run build` green. Live real-provider results: grounded cited chat + refusal; Studio summary/FAQ cited; playable WAV audio overview; **faithfulness eval 4/4** (`scripts/faithfulness_demo.py`).
+- Remaining human step: record the Loom / submit the agent session for delivery.
