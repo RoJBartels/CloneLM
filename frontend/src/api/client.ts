@@ -6,6 +6,7 @@
  */
 import type {
   AddSourceInput,
+  AudioOverview,
   ChatRequest,
   ChatStreamHandlers,
   Conversation,
@@ -226,4 +227,13 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ kind }),
     }),
+
+  // --- audio overview (Track F · stretch) ---
+  listAudio: (notebookId: string) =>
+    req<AudioOverview[]>(`/api/notebooks/${notebookId}/audio`),
+  generateAudio: (notebookId: string) =>
+    req<AudioOverview>(`/api/notebooks/${notebookId}/audio`, { method: "POST" }),
+  /** Absolute src for an audio overview's file, honoring the configured API
+   * base (the backend `url` field is a base-relative `/api/...` path). */
+  audioFileSrc: (audio: AudioOverview) => (audio.url ? BASE + audio.url : null),
 };

@@ -48,7 +48,7 @@ that binds a port to a concrete adapter, chosen from env config.
 |---|---|---|
 | `LLMProvider` | Anthropic **Claude Haiku 4.5** (chat); **Sonnet 4.6** for Studio/Audio synthesis | `fake` (deterministic, offline); Sonnet/others by config |
 | `EmbeddingProvider` | **bge-m3**, run locally (1024-dim, strong multilingual incl. German) | `fake` (offline); a SaaS embedder behind the same port |
-| `TTSProvider` | `fake` (valid silent WAV) | a real TTS adapter behind the same port |
+| `TTSProvider` | **Piper** local neural TTS (two German voices for the two-host Audio Overview, run offline) | `fake` (valid silent WAV); a SaaS TTS behind the same port |
 | `VectorStore` | pgvector cosine KNN, **notebook-scoped** | — |
 
 No vendor SDK is imported outside its adapter. With `LLM_PROVIDER=fake` /
@@ -85,8 +85,12 @@ docker compose up -d
 
 # 3. Backend
 cd backend
-uv sync --extra embeddings          # core deps + local bge-m3 (torch). Omit --extra
-                                    #   embeddings if you'll run EMBEDDING_PROVIDER=fake
+uv sync --extra embeddings --extra audio   # core deps + local bge-m3 (torch) +
+                                    #   Piper neural TTS. Omit --extra embeddings to run
+                                    #   EMBEDDING_PROVIDER=fake; omit --extra audio to run
+                                    #   TTS_PROVIDER=fake (Audio Overview becomes silent).
+uv run --extra audio python scripts/download_piper_voices.py   # one-time voice download
+                                    #   (else they auto-download on the first audio request)
 uv run alembic upgrade head         # create the schema
 uv run uvicorn app.main:app --reload
 #   → http://localhost:8000/health   ·   OpenAPI/docs at /docs

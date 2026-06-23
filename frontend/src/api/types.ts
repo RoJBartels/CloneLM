@@ -74,6 +74,16 @@ export interface StudioOutput {
   created_at: string;
 }
 
+export type AudioStatus = "processing" | "ready" | "error";
+
+export interface AudioOverview {
+  id: string;
+  notebook_id: string;
+  status: AudioStatus;
+  url: string | null;
+  created_at: string;
+}
+
 export type NoteOrigin = "manual" | "chat" | "studio";
 
 export interface Note {

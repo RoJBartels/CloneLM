@@ -1,6 +1,13 @@
 import { useState } from "react";
 
-import type { Citation, Note, StudioKind, StudioOutput } from "../api/types";
+import { api } from "../api/client";
+import type {
+  AudioOverview,
+  Citation,
+  Note,
+  StudioKind,
+  StudioOutput,
+} from "../api/types";
 import BelegModal from "./BelegModal";
 import NoteModal from "./NoteModal";
 
@@ -10,7 +17,7 @@ const TILES: { kind: StudioKind | "audio"; label: string; cls: string }[] = [
   { kind: "study_guide", label: "Study Guide", cls: "bg-[#ffd8a8] text-[#e8590c]" },
   { kind: "briefing", label: "Briefing", cls: "bg-ok-100 text-ok-600" },
   { kind: "timeline", label: "Timeline", cls: "bg-src-200 text-src-600" },
-  { kind: "audio", label: "Audio (Stretch)", cls: "bg-[#eebefa] text-[#ae3ec9]" },
+  { kind: "audio", label: "Audio", cls: "bg-[#eebefa] text-[#ae3ec9]" },
 ];
 
 /** Renders artifact text with inline [n] citation chips, same convention as
@@ -79,8 +86,10 @@ export default function StudioPane({
   enabled,
   notebookId,
   outputs,
+  audios,
   notes,
   onGenerate,
+  onGenerateAudio,
   onSaveOutputAsNote,
   onCreateNote,
   onUpdateNote,
@@ -89,25 +98,31 @@ export default function StudioPane({
   enabled: boolean;
   notebookId: string | null;
   outputs: StudioOutput[];
+  audios: AudioOverview[];
   notes: Note[];
   onGenerate: (kind: StudioKind) => Promise<void>;
+  onGenerateAudio: () => Promise<void>;
   onSaveOutputAsNote: (output: StudioOutput) => Promise<void>;
   onCreateNote: (title: string, content: string) => Promise<void>;
   onUpdateNote: (id: string, title: string, content: string) => Promise<void>;
   onDeleteNote: (id: string) => Promise<void>;
 }) {
-  const [pending, setPending] = useState<StudioKind | null>(null);
+  const [pending, setPending] = useState<StudioKind | "audio" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [belegCitation, setBelegCitation] = useState<Citation | null>(null);
   const [noteModalOpen, setNoteModalOpen] = useState(false);
   const [editingNote, setEditingNote] = useState<Note | null>(null);
 
   const generate = async (kind: StudioKind | "audio") => {
-    if (kind === "audio" || !enabled || !notebookId) return;
+    if (!enabled || !notebookId) return;
     setError(null);
     setPending(kind);
     try {
-      await onGenerate(kind);
+      if (kind === "audio") {
+        await onGenerateAudio();
+      } else {
+        await onGenerate(kind);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Generierung fehlgeschlagen");
     } finally {
@@ -123,10 +138,10 @@ export default function StudioPane({
         {TILES.map((t) => (
           <button
             key={t.kind}
-            disabled={!enabled || t.kind === "audio" || pending !== null}
+            disabled={!enabled || pending !== null}
             onClick={() => void generate(t.kind)}
             className={`rounded-md px-2 py-4 text-sm font-medium ring-1 ring-black/10 ${t.cls} ${
-              !enabled || t.kind === "audio" ? "cursor-not-allowed opacity-45" : ""
+              !enabled ? "cursor-not-allowed opacity-45" : ""
             }`}
           >
             {pending === t.kind ? "…" : t.label}
@@ -148,8 +163,35 @@ export default function StudioPane({
             <p className="mb-2 font-medium text-chrome-700">
               Generierte Artefakte (als Notiz speicherbar)
             </p>
-            {outputs.length === 0 && notes.length === 0 && (
+            {outputs.length === 0 && audios.length === 0 && notes.length === 0 && (
               <p className="text-chrome-500">Noch keine Artefakte oder Notizen.</p>
+            )}
+            {audios.length > 0 && (
+              <ul className="mb-2 space-y-2">
+                {audios.map((a) => (
+                  <li
+                    key={a.id}
+                    className="rounded-md bg-white p-2 ring-1 ring-chrome-300"
+                  >
+                    <p className="mb-1 text-xs font-semibold text-studio-600">
+                      Audio-Übersicht
+                    </p>
+                    {a.status === "ready" && api.audioFileSrc(a) ? (
+                      <audio
+                        controls
+                        src={api.audioFileSrc(a) ?? undefined}
+                        className="w-full"
+                      />
+                    ) : a.status === "error" ? (
+                      <p className="text-xs text-danger-500">
+                        Audio konnte nicht erstellt werden (Quellen unzureichend).
+                      </p>
+                    ) : (
+                      <p className="text-xs text-chrome-500">Wird erstellt …</p>
+                    )}
+                  </li>
+                ))}
+              </ul>
             )}
             <ul className="space-y-2">
               {outputs.map((o) => (

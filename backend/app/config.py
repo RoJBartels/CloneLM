@@ -43,7 +43,15 @@ class Settings(BaseSettings):
     embedding_dim: int = 1024
 
     # --- TTS provider selection ---
-    tts_provider: str = "fake"  # fake
+    tts_provider: str = "piper"  # piper | fake
+    # Local Piper neural voices for the two-host Audio Overview. Models are
+    # auto-downloaded into piper_voice_dir on first use (or via
+    # scripts/download_piper_voices.py). voice_dir is anchored to backend/ when
+    # relative. host_a/host_b are deliberately different voices/genders.
+    piper_voice_dir: str = "models/piper"
+    piper_voice_host_a: str = "de_DE-thorsten-medium"
+    piper_voice_host_b: str = "de_DE-kerstin-low"
+    piper_sample_rate: int = 22050
 
     # --- Retrieval / chunking ---
     retrieval_top_k: int = 8

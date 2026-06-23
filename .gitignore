@@ -35,3 +35,7 @@ models/
 
 # --- Postgres volume (if mounted locally) ---
 .pgdata/
+
+# --- Exported Claude Code agent sessions (deliverable, not source) ---
+sessions/
+sessions.zip

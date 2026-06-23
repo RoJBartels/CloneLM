@@ -1,7 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { api } from "./api/client";
-import type { AddSourceInput, Note, Notebook, Source, StudioKind, StudioOutput } from "./api/types";
+import type {
+  AddSourceInput,
+  AudioOverview,
+  Note,
+  Notebook,
+  Source,
+  StudioKind,
+  StudioOutput,
+} from "./api/types";
 import ChatPane from "./components/ChatPane";
 import SourcesPane from "./components/SourcesPane";
 import StudioPane from "./components/StudioPane";
@@ -27,6 +35,7 @@ export default function App() {
 
   const [notes, setNotes] = useState<Note[]>([]);
   const [outputs, setOutputs] = useState<StudioOutput[]>([]);
+  const [audios, setAudios] = useState<AudioOverview[]>([]);
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -90,6 +99,14 @@ export default function App() {
     }
   }, []);
 
+  const refreshAudio = useCallback(async (notebookId: string) => {
+    try {
+      setAudios(await api.listAudio(notebookId));
+    } catch {
+      // audio backend may not be ready yet; keep prior state
+    }
+  }, []);
+
   // --- load notebook-scoped data once the active notebook is known ---
   useEffect(() => {
     if (!notebook) return;
@@ -97,7 +114,8 @@ export default function App() {
     void refreshSources(notebook.id).finally(() => setSourcesLoading(false));
     void refreshNotes(notebook.id);
     void refreshStudio(notebook.id);
-  }, [notebook, refreshSources, refreshNotes, refreshStudio]);
+    void refreshAudio(notebook.id);
+  }, [notebook, refreshSources, refreshNotes, refreshStudio, refreshAudio]);
 
   // --- poll source status while any source is still processing ---
   const startPolling = useCallback(
@@ -128,6 +146,7 @@ export default function App() {
       setSelectedIds(new Set());
       setNotes([]);
       setOutputs([]);
+      setAudios([]);
     } catch (e) {
       setBootError(e instanceof Error ? e.message : "Notebook konnte nicht erstellt werden");
     }
@@ -160,6 +179,14 @@ export default function App() {
     if (!notebook) return;
     const created = await api.generateStudio(notebook.id, kind);
     setOutputs((prev) => [created, ...prev]);
+  };
+
+  const handleGenerateAudio = async () => {
+    if (!notebook) return;
+    // Backend renders synchronously, so the returned overview is already in a
+    // terminal (ready/error) state — no polling needed.
+    const created = await api.generateAudio(notebook.id);
+    setAudios((prev) => [created, ...prev]);
   };
 
   const handleSaveOutputAsNote = async (output: StudioOutput) => {
@@ -220,8 +247,10 @@ export default function App() {
           enabled={hasReadySource}
           notebookId={notebook?.id ?? null}
           outputs={outputs}
+          audios={audios}
           notes={notes}
           onGenerate={handleGenerateStudio}
+          onGenerateAudio={handleGenerateAudio}
           onSaveOutputAsNote={handleSaveOutputAsNote}
           onCreateNote={handleCreateNote}
           onUpdateNote={handleUpdateNote}

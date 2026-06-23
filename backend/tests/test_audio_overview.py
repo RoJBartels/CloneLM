@@ -22,11 +22,12 @@ import uuid
 import pytest
 from fastapi.testclient import TestClient
 
-from app.api.deps import get_embedder, get_llm
+from app.api.deps import get_embedder, get_llm, get_tts
 from app.domain.ports.llm import LLMProvider, LLMResponse, LLMUsage
 from app.infrastructure.persistence import orm
 from app.infrastructure.persistence.db import get_sessionmaker
 from app.infrastructure.providers.fake_embeddings import FakeEmbeddingProvider
+from app.infrastructure.providers.fake_tts import FakeTTSProvider
 from app.main import app
 
 EMBED_DIM = 1024
@@ -63,9 +64,13 @@ def client(db_available):
 
 @pytest.fixture(autouse=True)
 def _clear_overrides():
+    # Pin TTS to the fast, deterministic silent-WAV fake so these tests never
+    # invoke real Piper synthesis (the configured default is `piper`).
+    app.dependency_overrides[get_tts] = lambda: FakeTTSProvider()
     yield
     app.dependency_overrides.pop(get_llm, None)
     app.dependency_overrides.pop(get_embedder, None)
+    app.dependency_overrides.pop(get_tts, None)
 
 
 def _seed(texts: list[str]) -> uuid.UUID:

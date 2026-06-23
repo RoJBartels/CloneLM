@@ -27,6 +27,12 @@ dependencies = [
 embeddings = [
     "sentence-transformers>=3.0",
 ]
+# Local neural TTS for the Audio Overview (stretch). Pulls onnxruntime; the
+# fake-TTS path and the rest of the app do NOT need this. Voice models are
+# downloaded at runtime (see scripts/download_piper_voices.py).
+audio = [
+    "piper-tts>=1.4",
+]
 
 [dependency-groups]
 dev = [

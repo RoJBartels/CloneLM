@@ -45,6 +45,10 @@ from app.infrastructure.providers.bge_embeddings import BgeM3EmbeddingProvider
 from app.infrastructure.providers.fake_embeddings import FakeEmbeddingProvider
 from app.infrastructure.providers.fake_llm import FakeLLMProvider
 from app.infrastructure.providers.fake_tts import FakeTTSProvider
+from app.infrastructure.providers.piper_tts import PiperTTSProvider
+from app.shared.logging import get_logger
+
+log = get_logger(__name__)
 
 # --------------------------------------------------------------------------- #
 # Database session (one per request)
@@ -87,7 +91,22 @@ def get_embedder() -> EmbeddingProvider:
 
 @lru_cache
 def get_tts() -> TTSProvider:
-    # Only a fake adapter exists today; real TTS is the stretch (Track F).
+    s = get_settings()
+    if s.tts_provider == "piper":
+        provider = PiperTTSProvider(
+            voice_dir=s.piper_voice_dir,
+            voice_host_a=s.piper_voice_host_a,
+            voice_host_b=s.piper_voice_host_b,
+            output_sample_rate=s.piper_sample_rate,
+        )
+        if provider.is_available():
+            return provider
+        # Degrade gracefully (silent placeholder) rather than break the audio
+        # endpoint when the 'audio' extra isn't installed.
+        log.warning(
+            "Piper TTS selected but the 'audio' extra is not installed; "
+            "falling back to silent fake TTS. Install with `uv sync --extra audio`."
+        )
     return FakeTTSProvider()
 
 
