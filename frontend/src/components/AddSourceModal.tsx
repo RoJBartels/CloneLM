@@ -3,20 +3,22 @@ import { useRef, useState } from "react";
 import type { AddSourceInput } from "../api/types";
 import Modal from "./Modal";
 
-type Tab = "upload" | "url" | "drive" | "paste";
+export type Tab = "upload" | "url" | "paste";
 
 /**
- * Quellen-hinzufügen modal: Hochladen · Websites · Drive (disabled) ·
- * Text einfügen. Supports file drop + paste + URL, per the design.
+ * Quellen-hinzufügen modal: Hochladen · Websites · Text einfügen.
+ * Supports file drop + paste + URL, per the design.
  */
 export default function AddSourceModal({
   onClose,
   onSubmit,
+  initialTab = "upload",
 }: {
   onClose: () => void;
   onSubmit: (input: AddSourceInput) => Promise<void>;
+  initialTab?: Tab;
 }) {
-  const [tab, setTab] = useState<Tab>("upload");
+  const [tab, setTab] = useState<Tab>(initialTab);
   const [url, setUrl] = useState("");
   const [pasteTitle, setPasteTitle] = useState("");
   const [pasteContent, setPasteContent] = useState("");
@@ -73,7 +75,6 @@ export default function AddSourceModal({
   const tabs: { key: Tab; label: string }[] = [
     { key: "upload", label: "Hochladen" },
     { key: "url", label: "Websites" },
-    { key: "drive", label: "Drive" },
     { key: "paste", label: "Text einfügen" },
   ];
 
@@ -83,14 +84,12 @@ export default function AddSourceModal({
         {tabs.map((t) => (
           <button
             key={t.key}
-            disabled={t.key === "drive"}
             onClick={() => setTab(t.key)}
             className={`rounded-md px-3 py-2 text-sm font-medium ring-1 ${
               tab === t.key
                 ? "bg-src-200 text-src-600 ring-src-600"
                 : "bg-white text-chrome-700 ring-chrome-400"
-            } ${t.key === "drive" ? "cursor-not-allowed opacity-45" : ""}`}
-            title={t.key === "drive" ? "Demnächst verfügbar" : undefined}
+            }`}
           >
             {t.label}
           </button>
@@ -160,12 +159,6 @@ export default function AddSourceModal({
             {busy ? "Wird hinzugefügt…" : "Hinzufügen"}
           </button>
         </div>
-      )}
-
-      {tab === "drive" && (
-        <p className="rounded-md bg-chrome-50 px-4 py-6 text-center text-sm text-chrome-600">
-          Drive-Anbindung ist demnächst verfügbar.
-        </p>
       )}
 
       {tab === "paste" && (

@@ -57,13 +57,6 @@ export default function TopBar({
           title="Demnächst verfügbar"
           className="cursor-not-allowed rounded-md bg-white px-3 py-1.5 text-sm text-chrome-700 opacity-60 ring-1 ring-chrome-400"
         >
-          Teilen
-        </button>
-        <button
-          disabled
-          title="Demnächst verfügbar"
-          className="cursor-not-allowed rounded-md bg-white px-3 py-1.5 text-sm text-chrome-700 opacity-60 ring-1 ring-chrome-400"
-        >
           Einstellungen
         </button>
       </div>

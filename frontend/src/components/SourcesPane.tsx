@@ -1,7 +1,7 @@
 import { useState } from "react";
 
 import type { AddSourceInput, Source } from "../api/types";
-import AddSourceModal from "./AddSourceModal";
+import AddSourceModal, { type Tab } from "./AddSourceModal";
 
 const TYPE_LABEL: Record<Source["type"], string> = {
   file: "PDF",
@@ -29,7 +29,7 @@ export default function SourcesPane({
   loading: boolean;
   error: string | null;
 }) {
-  const [modalOpen, setModalOpen] = useState(false);
+  const [modalTab, setModalTab] = useState<Tab | null>(null);
   const allSelected = sources.length > 0 && selectedIds.size === sources.length;
 
   return (
@@ -37,15 +37,15 @@ export default function SourcesPane({
       <h2 className="mb-2 text-lg font-semibold text-src-600">Quellen</h2>
 
       <button
-        onClick={() => setModalOpen(true)}
+        onClick={() => setModalTab("upload")}
         className="mb-2 rounded-md bg-src-200 px-3 py-2 text-sm font-medium text-src-600 ring-1 ring-src-600"
       >
         + Quellen hinzufügen
       </button>
       <button
-        disabled
-        title="Demnächst verfügbar"
-        className="mb-4 cursor-not-allowed rounded-md bg-white px-3 py-2 text-sm text-chrome-700 opacity-60 ring-1 ring-chrome-400"
+        onClick={() => setModalTab("url")}
+        title="Website-URL als Quelle hinzufügen"
+        className="mb-4 rounded-md bg-white px-3 py-2 text-sm text-chrome-700 ring-1 ring-chrome-400 hover:bg-chrome-50"
       >
         Web-Recherche
       </button>
@@ -116,8 +116,12 @@ export default function SourcesPane({
 
       {loading && <p className="mt-2 text-xs text-chrome-500">Lädt…</p>}
 
-      {modalOpen && (
-        <AddSourceModal onClose={() => setModalOpen(false)} onSubmit={onAddSource} />
+      {modalTab && (
+        <AddSourceModal
+          initialTab={modalTab}
+          onClose={() => setModalTab(null)}
+          onSubmit={onAddSource}
+        />
       )}
     </aside>
   );
