@@ -28,15 +28,23 @@ It is demonstrably faithful — proven two ways:
 
 ## Architecture — modular monolith, hexagonal (ports & adapters)
 
-```
-  React (TS) SPA ──HTTP / SSE──▶  FastAPI  ──▶  Postgres + pgvector
-                                    │
-   api/      thin routers ─────────▶│  validate, call a service, return
-   services/ use cases ────────────▶│  ingestion · retrieval · chat · studio · notes · audio
-   domain/   entities + PORTS ◀─────┘  LLMProvider · EmbeddingProvider · TTSProvider ·
-                ▲                       VectorStore · repositories   (no I/O, no SDKs)
-   infrastructure/ adapters ──────────┘  anthropic_llm · bge_embeddings · pgvector_store ·
-                                          SQLAlchemy repos · alembic · fake_* providers
+```mermaid
+flowchart TB
+    SPA["React (TS) SPA"] -->|HTTP / SSE| API
+
+    subgraph Backend["FastAPI backend — modular monolith, hexagonal"]
+        direction TB
+        API["<b>api/</b> — thin routers<br/><i>validate · call a service · return</i>"]
+        SVC["<b>services/</b> — use cases<br/><i>ingestion · retrieval · chat · studio · notes · audio</i>"]
+        DOM["<b>domain/</b> — entities + PORTS · no I/O, no SDKs<br/><i>LLMProvider · EmbeddingProvider · TTSProvider · VectorStore · repositories</i>"]
+        INF["<b>infrastructure/</b> — adapters<br/><i>anthropic_llm · bge_embeddings · pgvector_store · SQLAlchemy repos · alembic · fake_*</i>"]
+
+        API -->|depends on| SVC
+        SVC -->|depends on| DOM
+        INF -. implements ports .-> DOM
+    end
+
+    INF --> DB[("Postgres + pgvector")]
 ```
 
 **Dependency rule (enforced):** dependencies point inward.
