@@ -44,6 +44,7 @@ from app.infrastructure.providers.anthropic_llm import AnthropicLLMProvider
 from app.infrastructure.providers.bge_embeddings import BgeM3EmbeddingProvider
 from app.infrastructure.providers.fake_embeddings import FakeEmbeddingProvider
 from app.infrastructure.providers.fake_llm import FakeLLMProvider
+from app.infrastructure.providers.ollama_llm import OllamaLLMProvider
 from app.infrastructure.providers.fake_tts import FakeTTSProvider
 from app.infrastructure.providers.piper_tts import PiperTTSProvider
 from app.shared.logging import get_logger
@@ -78,7 +79,25 @@ def get_llm() -> LLMProvider:
             heavy_model=s.llm_model_heavy,
             default_max_tokens=s.llm_max_tokens,
         )
+    if s.effective_llm_provider == "ollama":
+        return OllamaLLMProvider(
+            base_url=s.ollama_base_url,
+            model=s.ollama_model,
+            heavy_model=s.ollama_model_heavy,
+            default_max_tokens=s.llm_max_tokens,
+        )
     return FakeLLMProvider()
+
+
+def ollama_available(base_url: str) -> bool:
+    """Liveness probe for a local Ollama server (used by the settings UI)."""
+    return OllamaLLMProvider(base_url=base_url).is_available()
+
+
+def rebind_llm() -> None:
+    """Drop the cached LLM provider so the next request re-reads config and
+    binds the newly selected provider/model (used after a settings change)."""
+    get_llm.cache_clear()
 
 
 @lru_cache

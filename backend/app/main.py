@@ -10,7 +10,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app import __version__
-from app.api.routes import audio, chat, health, notebooks, notes, sources, studio
+from app.api.routes import (
+    audio,
+    chat,
+    health,
+    notebooks,
+    notes,
+    settings as settings_routes,
+    sources,
+    studio,
+)
 from app.config import get_settings
 from app.shared.errors import (
     InsufficientContextError,
@@ -47,6 +56,7 @@ def create_app() -> FastAPI:
     app.include_router(studio.router)
     app.include_router(notes.router)
     app.include_router(audio.router)
+    app.include_router(settings_routes.router)
 
     _register_error_handlers(app)
     return app

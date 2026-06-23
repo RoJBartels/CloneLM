@@ -104,7 +104,7 @@ def build_script(
         query=DEFAULT_QUERY,
         top_k=max(settings.retrieval_top_k, 24),
         system_instructions=SYSTEM_INSTRUCTIONS,
-        model=settings.llm_model_heavy,
+        model=settings.effective_heavy_model,
     )
 
     return parse_segments(result.text), result

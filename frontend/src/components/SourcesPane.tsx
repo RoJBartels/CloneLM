@@ -18,6 +18,7 @@ export default function SourcesPane({
   onToggleSelected,
   onToggleAll,
   onAddSource,
+  onDeleteSource,
   loading,
   error,
 }: {
@@ -26,6 +27,7 @@ export default function SourcesPane({
   onToggleSelected: (id: string) => void;
   onToggleAll: () => void;
   onAddSource: (input: AddSourceInput) => Promise<void>;
+  onDeleteSource: (id: string) => void;
   loading: boolean;
   error: string | null;
 }) {
@@ -77,7 +79,7 @@ export default function SourcesPane({
             {sources.map((s) => (
               <li
                 key={s.id}
-                className="flex items-center gap-2 rounded-md bg-white px-2 py-2 ring-1 ring-chrome-400"
+                className="group flex items-center gap-2 rounded-md bg-white px-2 py-2 ring-1 ring-chrome-400"
               >
                 <input
                   type="checkbox"
@@ -108,6 +110,16 @@ export default function SourcesPane({
                     Fehler
                   </span>
                 )}
+                <button
+                  onClick={() => {
+                    if (window.confirm(`Quelle „${s.title}“ löschen?`)) onDeleteSource(s.id);
+                  }}
+                  title="Quelle löschen"
+                  aria-label="Quelle löschen"
+                  className="shrink-0 rounded p-1 text-chrome-400 opacity-0 hover:bg-danger-100 hover:text-danger-500 focus:opacity-100 group-hover:opacity-100"
+                >
+                  🗑
+                </button>
               </li>
             ))}
           </ul>

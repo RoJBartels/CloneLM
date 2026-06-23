@@ -11,6 +11,8 @@ import type {
   ChatStreamHandlers,
   Conversation,
   Health,
+  LLMSettings,
+  LLMSettingsUpdate,
   Message,
   Note,
   NoteCreate,
@@ -171,6 +173,11 @@ async function streamChat(
 }
 
 export const api = {
+  // --- settings (LLM provider management) ---
+  getSettings: () => req<LLMSettings>("/api/settings"),
+  updateSettings: (body: LLMSettingsUpdate) =>
+    req<LLMSettings>("/api/settings", { method: "PUT", body: JSON.stringify(body) }),
+
   // --- notebooks ---
   getHealth: () => req<Health>("/health"),
   listNotebooks: () => req<Notebook[]>("/api/notebooks"),

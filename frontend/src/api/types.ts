@@ -114,6 +114,31 @@ export interface Health {
   version: string;
 }
 
+// --- settings (LLM provider management) ---
+
+export type LLMProviderChoice = "anthropic" | "ollama";
+
+export interface LLMSettings {
+  llm_provider: LLMProviderChoice;
+  /** Provider actually in use after fallback (e.g. "fake" when Anthropic is
+   * selected but no key is set). */
+  effective_llm_provider: string;
+  llm_model: string;
+  /** Whether an Anthropic key is stored. The key itself is never returned. */
+  anthropic_api_key_set: boolean;
+  ollama_base_url: string;
+  ollama_model: string;
+  ollama_available: boolean;
+}
+
+export interface LLMSettingsUpdate {
+  llm_provider?: LLMProviderChoice;
+  /** Send a non-empty value to set/replace the key; omit/blank to keep it. */
+  anthropic_api_key?: string;
+  ollama_base_url?: string;
+  ollama_model?: string;
+}
+
 // --- chat (SSE) ---
 
 export interface ChatRequest {

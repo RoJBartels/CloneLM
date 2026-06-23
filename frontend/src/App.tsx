@@ -26,6 +26,7 @@ const POLL_TIMEOUT_MS = 60000;
  */
 export default function App() {
   const [notebook, setNotebook] = useState<Notebook | null>(null);
+  const [notebooks, setNotebooks] = useState<Notebook[]>([]);
   const [bootError, setBootError] = useState<string | null>(null);
 
   const [sources, setSources] = useState<Source[]>([]);
@@ -47,10 +48,14 @@ export default function App() {
         const list = await api.listNotebooks();
         if (!alive) return;
         if (list.length > 0) {
+          setNotebooks(list);
           setNotebook(list[0]);
         } else {
           const created = await api.createNotebook("Unbenanntes Notebook");
-          if (alive) setNotebook(created);
+          if (alive) {
+            setNotebooks([created]);
+            setNotebook(created);
+          }
         }
       } catch (e) {
         if (alive) setBootError(e instanceof Error ? e.message : "Notebook konnte nicht geladen werden");
@@ -60,6 +65,17 @@ export default function App() {
       alive = false;
     };
   }, []);
+
+  const refreshNotebooks = useCallback(async () => {
+    try {
+      const list = await api.listNotebooks();
+      setNotebooks(list);
+      return list;
+    } catch {
+      // keep prior list on transient failure
+      return notebooks;
+    }
+  }, [notebooks]);
 
   const refreshSources = useCallback(async (notebookId: string) => {
     try {
@@ -138,17 +154,68 @@ export default function App() {
     if (pollRef.current) clearInterval(pollRef.current);
   }, []);
 
+  // Switching notebooks clears the per-notebook panes; the data-loading effect
+  // (keyed on `notebook`) then refetches sources/notes/studio/audio for the new
+  // active notebook, so isolation between notebooks is preserved.
+  const resetPanes = () => {
+    setSources([]);
+    setSelectedIds(new Set());
+    setNotes([]);
+    setOutputs([]);
+    setAudios([]);
+    setSourcesError(null);
+  };
+
+  const handleSelectNotebook = (id: string) => {
+    if (id === notebook?.id) return;
+    const target = notebooks.find((n) => n.id === id);
+    if (!target) return;
+    resetPanes();
+    setNotebook(target);
+  };
+
   const handleNewNotebook = async () => {
     try {
       const created = await api.createNotebook("Unbenanntes Notebook");
+      setNotebooks((prev) => [created, ...prev]);
+      resetPanes();
       setNotebook(created);
-      setSources([]);
-      setSelectedIds(new Set());
-      setNotes([]);
-      setOutputs([]);
-      setAudios([]);
     } catch (e) {
       setBootError(e instanceof Error ? e.message : "Notebook konnte nicht erstellt werden");
+    }
+  };
+
+  const handleRenameNotebook = async (id: string, title: string) => {
+    const trimmed = title.trim();
+    if (!trimmed) return;
+    try {
+      const updated = await api.updateNotebook(id, trimmed);
+      setNotebooks((prev) => prev.map((n) => (n.id === id ? updated : n)));
+      if (notebook?.id === id) setNotebook(updated);
+    } catch (e) {
+      setBootError(e instanceof Error ? e.message : "Notebook konnte nicht umbenannt werden");
+    }
+  };
+
+  const handleDeleteNotebook = async (id: string) => {
+    try {
+      await api.deleteNotebook(id);
+      const remaining = notebooks.filter((n) => n.id !== id);
+      setNotebooks(remaining);
+      // If we deleted the active notebook, switch to another — or create a
+      // fresh one so the app always has an active notebook.
+      if (notebook?.id === id) {
+        resetPanes();
+        if (remaining.length > 0) {
+          setNotebook(remaining[0]);
+        } else {
+          const created = await api.createNotebook("Unbenanntes Notebook");
+          setNotebooks([created]);
+          setNotebook(created);
+        }
+      }
+    } catch (e) {
+      setBootError(e instanceof Error ? e.message : "Notebook konnte nicht gelöscht werden");
     }
   };
 
@@ -158,6 +225,22 @@ export default function App() {
     await api.addSource(notebook.id, input);
     await refreshSources(notebook.id);
     startPolling(notebook.id);
+  };
+
+  const handleDeleteSource = async (id: string) => {
+    if (!notebook) return;
+    setSourcesError(null);
+    try {
+      await api.deleteSource(id);
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      await refreshSources(notebook.id);
+    } catch (e) {
+      setSourcesError(e instanceof Error ? e.message : "Quelle konnte nicht gelöscht werden");
+    }
   };
 
   const toggleSelected = (id: string) => {
@@ -221,7 +304,16 @@ export default function App() {
 
   return (
     <div className="flex h-full flex-col bg-white">
-      <TopBar notebookTitle={notebookTitle} onNewNotebook={() => void handleNewNotebook()} />
+      <TopBar
+        notebooks={notebooks}
+        activeNotebookId={notebook?.id ?? null}
+        notebookTitle={notebookTitle}
+        onSelectNotebook={handleSelectNotebook}
+        onNewNotebook={() => void handleNewNotebook()}
+        onRenameNotebook={(id, title) => void handleRenameNotebook(id, title)}
+        onDeleteNotebook={(id) => void handleDeleteNotebook(id)}
+        onOpenLibrary={() => void refreshNotebooks()}
+      />
       {bootError && (
         <p className="bg-danger-100 px-4 py-2 text-sm text-danger-500">{bootError}</p>
       )}
@@ -232,6 +324,7 @@ export default function App() {
           onToggleSelected={toggleSelected}
           onToggleAll={toggleAll}
           onAddSource={handleAddSource}
+          onDeleteSource={handleDeleteSource}
           loading={sourcesLoading}
           error={sourcesError}
         />

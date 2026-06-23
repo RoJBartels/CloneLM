@@ -27,8 +27,9 @@ with click-through → (stretch) groundedness check`.
 - `EmbeddingProvider`: `embed(texts) -> vectors`, `dim`, `model_id`.
   Adapters: `BgeM3Local` (default), `Voyage` (documented fallback).
 - `LLMProvider`: `complete(messages, **opts)`, `stream(...)`, `model_id`.
-  Adapters: `Anthropic` (default, Haiku 4.5). Documented alternatives: Sonnet 4.6,
-  Qwen3-via-Fireworks, Cohere.
+  Adapters: `Anthropic` (default, Haiku 4.5), `Ollama` (local open-source, e.g.
+  Llama 3.1 / Qwen — selectable at runtime via `Einstellungen`). Documented
+  alternatives: Sonnet 4.6, Cohere.
 
 ### Data model (initial)
 - `notebook(id, title, created_at)`
@@ -159,11 +160,11 @@ parallel the whole time** and **F deferred**. Realistic concurrency after 0a:
 **Goal:** reproduce the designed three-pane NotebookLM experience.
 
 Layout (per the design):
-- ☐ Top bar: `CloneLM` logo + notebook title · `+ Neues Notebook` · `Teilen` · `Einstellungen`.
-- ☐ **Quellen** pane (left · Track A data): `+ Quellen hinzufügen`, `Web-Recherche`, source list with type badge (PDF…) + status (`bereit`), `Alle auswählen` + per-source checkbox.
+- ☐ Top bar: `CloneLM` logo + notebook title · `+ Neues Notebook` · `Einstellungen`. *(`Teilen` removed as a dead button — see 2026-06-23 log.)*
+- ☐ **Quellen** pane (left · Track A data): `+ Quellen hinzufügen`, `Web-Recherche` *(opens the add-source modal on the `Websites` tab — see 2026-06-23 log)*, source list with type badge (PDF…) + status (`bereit`), `Alle auswählen` + per-source checkbox.
 - ☐ **Chat** pane (middle · Track B data): source/summary header (`N Quelle(n) · date`), suggested-question chips, streamed answers with inline citation chips `[1]`, `In Notiz speichern`, input `Text eingeben…`.
 - ☐ **Studio** pane (right · Track E/D): tiles `Zusammenfassung` · `FAQ` · `Study Guide` · `Briefing` · `Timeline` · `Audio (Stretch)`; "Generierte Artefakte (als Notiz speicherbar)"; `+ Notiz hinzufügen`.
-- ☐ **Modal — Quellen hinzufügen** (trigger `+ Quellen hinzufügen`): `Hochladen` · `Websites` · `Drive` · `Text einfügen`; supports PDF · Bilder · Dokumente · Audio · Text · URL.
+- ☐ **Modal — Quellen hinzufügen** (trigger `+ Quellen hinzufügen` or `Web-Recherche`): `Hochladen` · `Websites` · `Text einfügen`; supports PDF · Bilder · Dokumente · Audio · Text · URL. *(`Drive` tab removed as a dead button — see 2026-06-23 log.)*
 - ☐ **Modal — Beleg-Ansicht** (trigger: click citation chip `[1]`): source · page · section + highlighted exact passage (Track B span mapping).
 - ☐ **Empty state** (0 sources): chat input & Studio tiles **disabled** until ≥ 1 source is `bereit`; placeholder copy per `CloneLM-empty.excalidraw`.
 - ☐ Loading / error states.
@@ -245,6 +246,44 @@ notebooks (notebook-list clutter) — flagged for separate triage.
 **Done when:** the E2E loop renders correctly in a real browser and the three findings are
 fixed + verified. ✓
 
+## Phase 9 — Quality-of-life: notebook library, source deletion, runtime LLM settings ☑
+**Convergence** · post-launch UX/ops changes requested after the E2E pass. No schema change;
+the backend already exposed notebook + source CRUD, so these wire it into the UI and add
+runtime provider management.
+
+- ☑ **Notebook library.** The top-bar title is now a dropdown listing every notebook
+  (source/note counts + date) with switch · inline rename · delete (confirm). Creating a new
+  notebook no longer hides the others; deleting the active one falls back to another (or
+  creates a fresh one). Notebook isolation preserved on switch (panes reset + refetch).
+  [`TopBar.tsx`](frontend/src/components/TopBar.tsx) + [`App.tsx`](frontend/src/App.tsx) against
+  the existing `GET/POST/PATCH/DELETE /api/notebooks`. *(Also resolves the Phase-8
+  "demo-notebook clutter" observation — clutter is now deletable from the UI.)*
+- ☑ **Delete individual sources.** Per-row trash action in
+  [`SourcesPane.tsx`](frontend/src/components/SourcesPane.tsx) → existing
+  `DELETE /api/sources/{id}`; drops the source from the chat selection + refreshes.
+- ☑ **Runtime LLM settings (`Einstellungen`).** New `GET/PUT /api/settings`
+  ([`api/routes/settings.py`](backend/app/api/routes/settings.py)) to choose **Anthropic
+  (Claude)** or **Open Source (Ollama, local)** and store the Anthropic key. Persisted to the
+  gitignored `backend/.env` via `config.update_env_values()` (writes `.env` **and**
+  `os.environ`, clears the settings cache) and applied live by rebinding the cached provider
+  (`deps.rebind_llm()`). The key is **write-only** — GET returns only `anthropic_api_key_set`,
+  never the value. New `OllamaLLMProvider`
+  ([`infrastructure/providers/ollama_llm.py`](backend/app/infrastructure/providers/ollama_llm.py))
+  speaks the `LLMProvider` port over Ollama's HTTP API (complete · stream · JSON-schema
+  structured output · liveness probe), **no new deps** (reuses `httpx`). `effective_heavy_model`
+  resolves the Studio/Audio synthesis model per active provider. UI:
+  [`SettingsModal.tsx`](frontend/src/components/SettingsModal.tsx) (provider radio, key entry,
+  Ollama URL/model + reachability indicator).
+
+**Verification:** `ruff` clean · **73 backend pytest still passing** · frontend `tsc` +
+`npm run build` green · settings GET/PUT round-trip checked (provider switch + model persisted,
+existing key preserved on empty submit, key never leaked, `.env` writer updates-in-place /
+appends / preserves comments). The real `backend/.env` was untouched (tests redirected
+`ENV_PATH` to temp files).
+
+**Done when:** notebooks are switchable/deletable, sources are individually deletable, and the
+LLM provider + key are manageable at runtime from the UI and survive a restart. ✓
+
 ---
 
 ## Decisions log
@@ -258,10 +297,12 @@ fixed + verified. ✓
 - **2026-06-21** — Execution mechanics: background sub-agents/worktrees were unavailable in the session, so Tracks A–D ran as **parallel foreground sub-agents** against the frozen Phase-0 contracts (user decision). Cross-track contracts fixed at fan-out: source add = multipart form; chat = SSE (meta/token/citation/done/error).
 - **2026-06-21** — AI realism: real **bge-m3** (local) + real **Claude Haiku 4.5** enabled. Live faithfulness verified end-to-end: in-source question → grounded, cited German answer; out-of-source question → explicit refusal, zero citations. 51 backend tests green; frontend build green.
 - **2026-06-21** — Frontend E2E test (browser-use) over the real stack surfaced 3 bugs, all fixed on `fix/sse-rendering-and-studio-citations` (atomic commits): chat SSE not rendering (CRLF vs `\n\n` parser), Studio study-guide stored as raw truncated JSON (tolerant parser + larger Studio token budget), and citations without inline markers being unreachable (prompt requires inline markers + UI "Belege:" fallback). Diagnosed by 3 parallel agents in isolated worktrees. See **Phase 8**.
+- **2026-06-23** — Quality-of-life + ops (Phase 9): (1) **notebook library** in the top bar (list/switch/rename/delete; new notebooks no longer hide old ones), (2) **per-source delete** in the Quellen pane, (3) **runtime LLM management** in `Einstellungen` — pick Anthropic (Claude) or **Ollama** (local open-source) and store the Anthropic key. Added a real **Ollama `LLMProvider` adapter** (previously a documented-only alternative; user chose Ollama as the "Open Source" option). Persistence honors CLAUDE.md invariant #8 (secrets via env): saved to gitignored `backend/.env` + `os.environ`, providers hot-rebound; the key is write-only (never returned by the API). User decisions captured: OSS provider = Ollama; persistence = `.env`.
+- **2026-06-23** — UI cleanup of dead/greyed-out buttons. `Web-Recherche` (Quellen pane) is now wired: it opens the add-source modal on the `Websites` tab so a URL can be ingested as a source (new optional `initialTab` prop on `AddSourceModal`; the existing `type:"url"` ingestion path is reused). Removed two non-functional buttons: the disabled `Drive` tab from the add-source modal and the disabled `Teilen` button from the top bar. `tsc` + `npm run build` green.
 
 ---
 
-## Status snapshot (2026-06-21) — ALL PHASES COMPLETE
-- ☑ Phase 0 · ☑ Phase 1 Ingestion (A) · ☑ Phase 2 Grounded chat CORE (B) · ☑ Phase 3 Frontend UX (C) · ☑ Phase 4 Studio (E) · ☑ Phase 5 Notes (D) · ☑ Phase 6 Audio stretch (F) · ☑ Phase 7 eval/docs/polish · ☑ Phase 8 E2E test & fixes
+## Status snapshot (2026-06-23) — ALL PHASES COMPLETE
+- ☑ Phase 0 · ☑ Phase 1 Ingestion (A) · ☑ Phase 2 Grounded chat CORE (B) · ☑ Phase 3 Frontend UX (C) · ☑ Phase 4 Studio (E) · ☑ Phase 5 Notes (D) · ☑ Phase 6 Audio stretch (F) · ☑ Phase 7 eval/docs/polish · ☑ Phase 8 E2E test & fixes · ☑ Phase 9 QoL (notebook library · per-source delete · runtime LLM settings w/ Ollama)
 - Verification: **73 backend pytest passing**, `ruff` clean (app/tests/scripts), frontend `tsc` + `npm run build` green. Live real-provider results: grounded cited chat + refusal; Studio summary/FAQ cited; playable WAV audio overview; **faithfulness eval 4/4** (`scripts/faithfulness_demo.py`). Browser-use E2E (S0–S7) passing after the Phase 8 fixes (chat SSE render · study-guide clean render · citation reachability).
 - Remaining human step: record the Loom / submit the agent session for delivery.

@@ -239,3 +239,32 @@ class HealthStatus(BaseModel):
     status: str
     db: str
     version: str
+
+
+# --------------------------------------------------------------------------- #
+# Settings (LLM provider management — never echoes the API key back)
+# --------------------------------------------------------------------------- #
+
+
+class LLMSettings(BaseModel):
+    """Current LLM configuration as exposed to the Einstellungen UI. The secret
+    itself is NEVER returned — only ``anthropic_api_key_set`` says whether one
+    is configured."""
+
+    llm_provider: str  # configured: anthropic | ollama
+    effective_llm_provider: str  # after fallback (e.g. -> fake without a key)
+    llm_model: str
+    anthropic_api_key_set: bool
+    ollama_base_url: str
+    ollama_model: str
+    ollama_available: bool
+
+
+class LLMSettingsUpdate(BaseModel):
+    """Partial update from the UI. Omitted / null fields are left unchanged.
+    An empty-string api key is ignored (use it to keep the existing key)."""
+
+    llm_provider: str | None = Field(default=None, pattern="^(anthropic|ollama)$")
+    anthropic_api_key: str | None = None
+    ollama_base_url: str | None = None
+    ollama_model: str | None = None

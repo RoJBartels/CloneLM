@@ -59,7 +59,7 @@ def generate_studio(
     service = StudioService(
         generator,
         studio_repo,
-        heavy_model=settings.llm_model_heavy,
+        heavy_model=settings.effective_heavy_model,
         top_k=max(settings.retrieval_top_k, MIN_STUDIO_TOP_K),
     )
     return service.generate(notebook_id=notebook_id, kind=body.kind)
