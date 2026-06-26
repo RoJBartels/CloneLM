@@ -25,7 +25,9 @@ with click-through → (stretch) groundedness check`.
 
 ### Provider abstractions (build in Phase 0, never bypass)
 - `EmbeddingProvider`: `embed(texts) -> vectors`, `dim`, `model_id`.
-  Adapters: `BgeM3Local` (default), `Voyage` (documented fallback).
+  Adapters: `BgeM3Local` (localhost default), **`Voyage`** (hosted/deployed build —
+  real adapter as of Phase 10; 1024-dim like bge-m3 so the schema is unchanged),
+  `fake`.
 - `LLMProvider`: `complete(messages, **opts)`, `stream(...)`, `model_id`.
   Adapters: `Anthropic` (default, Haiku 4.5), `Ollama` (local open-source, e.g.
   Llama 3.1 / Qwen — selectable at runtime via `Einstellungen`). Documented
@@ -40,6 +42,9 @@ with click-through → (stretch) groundedness check`.
 - `citation(id, message_id, chunk_id, start_char, end_char)`
 - `note(id, notebook_id, title, content, origin[chat|studio|manual], created_at)`
 - `studio_output(id, notebook_id, kind, content, created_at)`
+- *(Phase 11, deployed build)* `app_user(id, email, password_hash,
+  anthropic_key_encrypted, voyage_key_encrypted, created_at)` +
+  `notebook.user_id` owner FK — adds per-user accounts and data isolation.
 
 ---
 
@@ -284,6 +289,65 @@ appends / preserves comments). The real `backend/.env` was untouched (tests redi
 **Done when:** notebooks are switchable/deletable, sources are individually deletable, and the
 LLM provider + key are manageable at runtime from the UI and survive a restart. ✓
 
+## Phase 10 — Deployable hosted build (Railway) ☑
+**Convergence** · make the app shippable to a public URL without changing the localhost
+experience. A single `DEPLOYED` flag (env, boolean) switches the two builds; the embedding
+model is **derived from it**, never a free choice, so a notebook's vectors can't mix models.
+
+- ☑ **`DEPLOYED` flag** in [`config.py`](backend/app/config.py): `false` = localhost (bge-m3
+  local, optional Ollama), `true` = hosted. `effective_embedding_provider` /
+  `effective_llm_provider` derive the active adapters from it.
+- ☑ **Voyage AI embeddings** for the hosted build — real
+  [`VoyageEmbeddingProvider`](backend/app/infrastructure/providers/voyage_embeddings.py)
+  (no GPU needed). `voyageai` is a default dep; the heavy local bge-m3/torch stack stays an
+  opt-in extra, so the hosted image installs neither. `voyage-3.5` emits 1024-dim vectors like
+  bge-m3 → **schema unchanged**. (Voyage authenticates with its own key, not the Anthropic key.)
+- ☑ **Two-service Railway deploy, Nixpacks, no Docker** —
+  [`backend/railway.toml`](backend/railway.toml) + [`frontend/railway.toml`](frontend/railway.toml)
+  (Vite build served by `serve`) + [`RAILWAY.md`](RAILWAY.md). `DATABASE_URL` is normalized to
+  the `postgresql+psycopg://` driver so the platform URL pastes in verbatim; migrations run on boot.
+- ☑ **Audio Overview is silent on the deploy** (no Piper in the lean image → fake TTS) and the
+  Studio **Audio tile is greyed out**; key-source links added under the Settings key fields.
+
+**Verification:** `ruff` clean · backend tests pass · frontend build green · deployed-mode config
+smoke (DEPLOYED=true → Voyage embedder bound, DATABASE_URL scheme normalized).
+**Done when:** the app runs as two Railway services + Postgres against Voyage embeddings, with
+localhost behavior unchanged. ✓
+
+## Phase 11 — Multi-user authentication & per-user keys ☑
+**Convergence** · turn the hosted build into a real multi-tenant app (requested after the
+evaluator signalled they also assess shipping a productive app solo). **Auth is gated by
+`DEPLOYED`**: localhost stays single-user with no login; the deployed build requires accounts.
+Authorization (ownership by `user_id`) is uniform via one `current_user` dependency (a JWT user
+when deployed, a seeded local user otherwise), so there is a single data path.
+
+- ☑ **Accounts & sessions.** `POST /api/auth/{register,login}`, `GET /api/auth/me`, public
+  `GET /api/config` ([`api/routes/auth.py`](backend/app/api/routes/auth.py)). Passwords →
+  **argon2id** one-way hash; sessions → **HS256 JWT** bearer. New ports
+  ([`domain/ports/auth.py`](backend/app/domain/ports/auth.py): `PasswordHasher` · `TokenService`
+  · `SecretCipher`) + adapters ([`infrastructure/security.py`](backend/app/infrastructure/security.py)).
+- ☑ **Per-user API keys.** Each user brings their **own** Anthropic + Voyage keys at
+  registration (live-probed unless disabled). Keys are **Fernet-encrypted at rest** (master key
+  in env, decrypted in-memory per request, never returned). The server holds **no** model keys —
+  `get_user_llm` / `get_user_embedder` build providers per request from the signed-in user's
+  decrypted keys.
+- ☑ **Per-user data isolation.** `app_user` table + `notebook.user_id` owner FK (migration
+  [`0002`](backend/app/infrastructure/migrations/versions/0002_users_and_ownership.py) — seeds the
+  local user, backfills existing notebooks). Every notebook + child route enforces ownership
+  (**404** on not-owned so existence doesn't leak); `SqlUserRepository` added.
+- ☑ **Frontend.** Login/register gate ([`AuthView.tsx`](frontend/src/components/AuthView.tsx)),
+  bearer-token client with 401 → login, per-user key management + Voyage field in Settings, and
+  account + logout in the top bar.
+
+**Verification:** `ruff` clean · **86 backend pytest passing** (adds argon2/Fernet/JWT units,
+register/login/me, encryption-at-rest, cross-user isolation, per-user provider wiring) · frontend
+build green. **Deployed-mode browser UI test (browser-use):** login gate · registration with
+Anthropic+Voyage keys → app loads scoped to the account · Settings shows both keys stored ·
+**cross-user isolation** (user B sees a fresh empty workspace, none of user A's notebooks/note).
+It surfaced one stale Settings string (Voyage key described as server-side) → fixed.
+**Done when:** the deployed build has accounts, per-user encrypted keys, and enforced data
+isolation, with localhost untouched. ✓
+
 ---
 
 ## Decisions log
@@ -299,10 +363,13 @@ LLM provider + key are manageable at runtime from the UI and survive a restart. 
 - **2026-06-21** — Frontend E2E test (browser-use) over the real stack surfaced 3 bugs, all fixed on `fix/sse-rendering-and-studio-citations` (atomic commits): chat SSE not rendering (CRLF vs `\n\n` parser), Studio study-guide stored as raw truncated JSON (tolerant parser + larger Studio token budget), and citations without inline markers being unreachable (prompt requires inline markers + UI "Belege:" fallback). Diagnosed by 3 parallel agents in isolated worktrees. See **Phase 8**.
 - **2026-06-23** — Quality-of-life + ops (Phase 9): (1) **notebook library** in the top bar (list/switch/rename/delete; new notebooks no longer hide old ones), (2) **per-source delete** in the Quellen pane, (3) **runtime LLM management** in `Einstellungen` — pick Anthropic (Claude) or **Ollama** (local open-source) and store the Anthropic key. Added a real **Ollama `LLMProvider` adapter** (previously a documented-only alternative; user chose Ollama as the "Open Source" option). Persistence honors CLAUDE.md invariant #8 (secrets via env): saved to gitignored `backend/.env` + `os.environ`, providers hot-rebound; the key is write-only (never returned by the API). User decisions captured: OSS provider = Ollama; persistence = `.env`.
 - **2026-06-23** — UI cleanup of dead/greyed-out buttons. `Web-Recherche` (Quellen pane) is now wired: it opens the add-source modal on the `Websites` tab so a URL can be ingested as a source (new optional `initialTab` prop on `AddSourceModal`; the existing `type:"url"` ingestion path is reused). Removed two non-functional buttons: the disabled `Drive` tab from the add-source modal and the disabled `Teilen` button from the top bar. `tsc` + `npm run build` green.
+- **2026-06-26** — Deployability (Phase 10). Added a boolean `DEPLOYED` switch between the localhost build (unchanged) and a hosted build, deploying as **two Railway services + Postgres via Nixpacks (no Docker)**. The hosted build embeds with **Voyage AI** (real adapter; `voyageai` a default dep, bge-m3/torch kept as an opt-in extra so the hosted image stays lean) instead of local bge-m3 — both 1024-dim, so no schema/re-index. The embedding model is **not** user-selectable (derived from `DEPLOYED`) to avoid mixing vector spaces. Audio is silent on the deploy (no Piper) with the Studio Audio tile greyed out. User decisions: deploy target = Railway; two services from the git repo (no hand-written Dockerfile); embeddings not user-choosable.
+- **2026-06-26** — Multi-user auth (Phase 11). The deployed build became **multi-tenant**: accounts (argon2id passwords, HS256 JWT sessions), **per-user API keys** that each user enters at registration (Anthropic + Voyage, Fernet-encrypted at rest — the server holds no model keys), and **per-user data isolation** (notebook `user_id` owner; every route 404s on not-owned). Auth is gated by `DEPLOYED` so localhost stays single-user/no-login; authorization is uniform via one `current_user` dependency (local user when not deployed). User decisions: build it for the deploy to demonstrate shipping a productive app solo; users supply **both** their Anthropic and Voyage keys; store passwords hashed and keys encrypted. Verified by 86 backend tests + a deployed-mode browser UI test (login gate, per-user-key registration, cross-user isolation), which caught and fixed a stale "Voyage key is server-side" Settings note.
 
 ---
 
-## Status snapshot (2026-06-23) — ALL PHASES COMPLETE
-- ☑ Phase 0 · ☑ Phase 1 Ingestion (A) · ☑ Phase 2 Grounded chat CORE (B) · ☑ Phase 3 Frontend UX (C) · ☑ Phase 4 Studio (E) · ☑ Phase 5 Notes (D) · ☑ Phase 6 Audio stretch (F) · ☑ Phase 7 eval/docs/polish · ☑ Phase 8 E2E test & fixes · ☑ Phase 9 QoL (notebook library · per-source delete · runtime LLM settings w/ Ollama)
-- Verification: **73 backend pytest passing**, `ruff` clean (app/tests/scripts), frontend `tsc` + `npm run build` green. Live real-provider results: grounded cited chat + refusal; Studio summary/FAQ cited; playable WAV audio overview; **faithfulness eval 4/4** (`scripts/faithfulness_demo.py`). Browser-use E2E (S0–S7) passing after the Phase 8 fixes (chat SSE render · study-guide clean render · citation reachability).
+## Status snapshot (2026-06-26) — ALL PHASES COMPLETE
+- ☑ Phase 0 · ☑ Phase 1 Ingestion (A) · ☑ Phase 2 Grounded chat CORE (B) · ☑ Phase 3 Frontend UX (C) · ☑ Phase 4 Studio (E) · ☑ Phase 5 Notes (D) · ☑ Phase 6 Audio stretch (F) · ☑ Phase 7 eval/docs/polish · ☑ Phase 8 E2E test & fixes · ☑ Phase 9 QoL (notebook library · per-source delete · runtime LLM settings w/ Ollama) · ☑ Phase 10 Deployable hosted build (Railway · Voyage embeddings · `DEPLOYED` flag) · ☑ Phase 11 Multi-user auth (accounts · per-user encrypted keys · data isolation)
+- Verification: **86 backend pytest passing**, `ruff` clean (app/tests/scripts), frontend `tsc` + `npm run build` green. Live real-provider results: grounded cited chat + refusal; Studio summary/FAQ cited; playable WAV audio overview; **faithfulness eval 4/4** (`scripts/faithfulness_demo.py`). Browser-use E2E passing: Phase 8 (S0–S7, real stack) + Phase 11 (deployed-mode auth + cross-user isolation).
+- **Two builds:** localhost (single-user, bge-m3, optional Ollama — unchanged) and a hosted/deployed build (`DEPLOYED=true`: multi-user accounts, per-user Anthropic+Voyage keys, Voyage embeddings, Railway). See [RAILWAY.md](RAILWAY.md).
 - Remaining human step: record the Loom / submit the agent session for delivery.

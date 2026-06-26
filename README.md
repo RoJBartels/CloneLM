@@ -9,6 +9,14 @@ text), and work with them: **grounded chat with clickable citations**, one-click
 **Claude** and a **local open-source model (Ollama)** in **Einstellungen** — at
 runtime, no restart or code change. The UI is in German.
 
+CloneLM runs in **two builds**, chosen by a single `DEPLOYED` env flag:
+- **Localhost** (default, `DEPLOYED=false`): single-user, no login, local **bge-m3**
+  embeddings, optional local Ollama LLM — the experience above.
+- **Hosted / deployed** (`DEPLOYED=true`): a **multi-user** app with accounts,
+  **per-user API keys** (each user brings their own Anthropic + Voyage keys, stored
+  encrypted), **per-user data isolation**, and **Voyage AI** embeddings (no GPU).
+  Ships as two services on **Railway** — see [RAILWAY.md](RAILWAY.md).
+
 > ### North star — faithfulness over everything
 > Every answer and artifact is produced **only** from retrieved chunks of the
 > active notebook's sources (RAG), carries a **citation** you can click to see the
@@ -58,7 +66,7 @@ that binds a port to a concrete adapter, chosen from env config.
 | Port | Default adapter | Alternatives |
 |---|---|---|
 | `LLMProvider` | Anthropic **Claude Haiku 4.5** (chat); **Sonnet 4.6** for Studio/Audio synthesis | **Ollama** (local open-source, e.g. Llama 3.1 / Qwen) — selectable at runtime in `Einstellungen`; `fake` (deterministic, offline); Sonnet/others by config |
-| `EmbeddingProvider` | **bge-m3**, run locally (1024-dim, strong multilingual incl. German) | `fake` (offline); a SaaS embedder behind the same port |
+| `EmbeddingProvider` | **bge-m3**, run locally (1024-dim, strong multilingual incl. German) | **Voyage AI** `voyage-3.5` (hosted, 1024-dim — used in the deployed build, no GPU); `fake` (offline) |
 | `TTSProvider` | **Piper** local neural TTS (two German voices for the two-host Audio Overview, run offline) | `fake` (valid silent WAV); a SaaS TTS behind the same port |
 | `VectorStore` | pgvector cosine KNN, **notebook-scoped** | — |
 
@@ -77,9 +85,11 @@ by Studio and Audio.
 ### Data model
 `notebook · source · chunk(embedding vector, char offsets, page) · conversation ·
 message · citation(message|studio, denormalized source span) · note ·
-studio_output · audio_overview`. The whole schema is one Alembic migration
-(`backend/app/infrastructure/migrations/versions/0001_initial.py`); sources stamp
-`embedding_model` / `chunk_strategy` so a future re-index can migrate cleanly.
+studio_output · audio_overview`. The core schema is one Alembic migration
+(`…/migrations/versions/0001_initial.py`); sources stamp `embedding_model` /
+`chunk_strategy` so a future re-index can migrate cleanly. The deployed build adds
+`app_user` + a `notebook.user_id` owner FK in migration `0002` (accounts +
+per-user data isolation; passwords argon2-hashed, API keys Fernet-encrypted).
 
 ---
 
@@ -129,6 +139,26 @@ the model / server URL in the panel (or via `OLLAMA_MODEL` / `OLLAMA_BASE_URL`).
 
 ---
 
+## Deploying (hosted, multi-user)
+
+Set `DEPLOYED=true` to run the hosted build: a multi-user app where each user
+registers an account and supplies their **own** Anthropic + Voyage keys (stored
+encrypted), gets their **own isolated** notebooks, and embeds via Voyage AI (no
+GPU). The server then holds **no** model keys — only two secrets:
+
+```bash
+DEPLOYED=true
+JWT_SECRET=...               # python -c "import secrets; print(secrets.token_urlsafe(48))"
+SECRET_ENCRYPTION_KEY=...    # python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+Security: passwords are **argon2id**-hashed; per-user API keys are **Fernet**-encrypted
+at rest (master key in env, decrypted in-memory per request, never returned). Auth is
+gated by `DEPLOYED`, so localhost stays single-user with no login. Full **Railway**
+walkthrough (two services via Nixpacks, no Docker) — [RAILWAY.md](RAILWAY.md).
+
+---
+
 ## Tests & the faithfulness eval
 
 ```bash
@@ -163,18 +193,20 @@ backend/
     main.py            app factory + router registration
     config.py          settings + provider selection (env-driven)
     api/               deps.py (composition root) · routes/ (notebooks, sources,
-                       chat, studio, notes, audio, settings, health)
-    domain/            models.py (pure entities/DTOs) · ports/ (interfaces)
+                       chat, studio, notes, audio, settings, auth, config, health)
+    domain/            models.py (pure entities/DTOs) · ports/ (interfaces, incl. auth)
     services/          ingestion · retrieval · chat (GroundedGenerator) ·
                        studio · notes · audio
-    infrastructure/    providers/ (anthropic_llm, ollama_llm, bge_embeddings, fake_*, tts) ·
-                       persistence/ (orm, repositories, pgvector_store, db) · migrations/
-  tests/               contracts · per-feature tests · faithfulness eval (73 tests)
+    infrastructure/    providers/ (anthropic_llm, ollama_llm, bge_embeddings,
+                       voyage_embeddings, fake_*, tts) · security.py (argon2/JWT/Fernet) ·
+                       persistence/ (orm, repositories, pgvector_store, db) · migrations/ (0001, 0002)
+  tests/               contracts · per-feature · faithfulness eval · auth/isolation (86 tests)
   scripts/             faithfulness_demo.py
   sample_data/         fontawesome5.md · photosynthesis.txt (for the demo)
-frontend/              React + TS + Vite + Tailwind v4 (three-pane German UX)
+frontend/              React + TS + Vite + Tailwind v4 (three-pane German UX; AuthView gate)
 design/                CloneLM-*.excalidraw (UI source of truth)
 docker-compose.yml     Postgres + pgvector
+railway.toml (×2)      backend/ + frontend/ Railway (Nixpacks) · RAILWAY.md deploy guide
 ```
 
 ---
@@ -204,5 +236,8 @@ docker-compose.yml     Postgres + pgvector
 All product phases implemented (see [PLAN.md](PLAN.md)): notebooks, ingestion,
 grounded cited chat with refusal (SSE), Studio artifacts, notes, and a stretch
 audio overview — plus a notebook library, per-source deletion, and runtime LLM
-provider management (Claude or local Ollama). 73 backend tests pass; frontend
-builds; faithfulness verified offline and live.
+provider management (Claude or local Ollama). The app is also **deployable as a
+hosted, multi-user build** (`DEPLOYED=true`: accounts, per-user encrypted Anthropic
++ Voyage keys, per-user data isolation, Voyage embeddings, two-service Railway
+deploy). **86 backend tests pass**; frontend builds; faithfulness verified offline
+and live; the deployed-mode auth + isolation flow verified in a real browser.
