@@ -29,10 +29,36 @@ def _uuid_col() -> Mapped[uuid.UUID]:
     return mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
 
 
+class UserORM(Base):
+    """Account row for the deployed (multi-user) build. ``password_hash`` is a
+    one-way argon2id hash; the API keys are Fernet-encrypted at rest (the server
+    holds no plaintext key). Table is ``app_user`` to avoid the reserved word
+    ``user`` in Postgres."""
+
+    __tablename__ = "app_user"
+
+    id: Mapped[uuid.UUID] = _uuid_col()
+    email: Mapped[str] = mapped_column(String(320), unique=True, index=True, nullable=False)
+    password_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    anthropic_key_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    voyage_key_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), default=func.now()
+    )
+
+
 class NotebookORM(Base):
     __tablename__ = "notebook"
 
     id: Mapped[uuid.UUID] = _uuid_col()
+    # Owner. Nullable for migration safety on pre-existing local data; the app
+    # always sets it (real user when deployed, the seeded local user otherwise).
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("app_user.id", ondelete="CASCADE"),
+        index=True,
+        nullable=True,
+    )
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), default=func.now()

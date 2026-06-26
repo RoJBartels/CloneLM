@@ -247,17 +247,21 @@ class HealthStatus(BaseModel):
 
 
 class LLMSettings(BaseModel):
-    """Current LLM configuration as exposed to the Einstellungen UI. The secret
-    itself is NEVER returned — only ``anthropic_api_key_set`` says whether one
-    is configured."""
+    """Current LLM configuration as exposed to the Einstellungen UI. Secrets are
+    NEVER returned — only the ``*_api_key_set`` booleans say whether one exists.
+    In the deployed build these reflect the signed-in user's own stored keys."""
 
     llm_provider: str  # configured: anthropic | ollama
     effective_llm_provider: str  # after fallback (e.g. -> fake without a key)
     llm_model: str
     anthropic_api_key_set: bool
+    voyage_api_key_set: bool = False
     ollama_base_url: str
     ollama_model: str
     ollama_available: bool
+    # True in the hosted build: the UI hides the local-model (Ollama) option and
+    # embeddings run on Voyage AI. See Settings.deployed.
+    deployed: bool = False
 
 
 class LLMSettingsUpdate(BaseModel):
@@ -266,5 +270,58 @@ class LLMSettingsUpdate(BaseModel):
 
     llm_provider: str | None = Field(default=None, pattern="^(anthropic|ollama)$")
     anthropic_api_key: str | None = None
+    voyage_api_key: str | None = None
     ollama_base_url: str | None = None
     ollama_model: str | None = None
+
+
+# --------------------------------------------------------------------------- #
+# Auth (deployed build) — accounts, per-user API keys
+# --------------------------------------------------------------------------- #
+
+
+class User(_Entity):
+    """Internal account entity. Carries the password hash and encrypted API keys,
+    so it is NEVER returned from a route directly — use UserPublic / TokenResponse.
+    """
+
+    id: uuid.UUID
+    email: str
+    password_hash: str
+    anthropic_key_encrypted: str | None = None
+    voyage_key_encrypted: str | None = None
+    created_at: datetime
+
+
+class UserPublic(BaseModel):
+    """Safe projection of a user for API responses (no secrets)."""
+
+    id: uuid.UUID
+    email: str
+    created_at: datetime
+
+
+class RegisterRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=320)
+    password: str = Field(min_length=8, max_length=200)
+    # The user brings their own keys. Voyage is required only when deployed
+    # (localhost embeds locally with bge-m3); enforced in the route.
+    anthropic_api_key: str = Field(min_length=1)
+    voyage_api_key: str | None = None
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: UserPublic
+
+
+class AppConfig(BaseModel):
+    """Public, unauthenticated config so the pre-login UI knows the mode."""
+
+    deployed: bool

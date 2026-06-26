@@ -13,14 +13,16 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.api.deps import (
-    get_embedder,
-    get_llm,
+    assert_notebook_owner,
+    get_current_user,
     get_notebook_repo,
     get_studio_repo,
+    get_user_embedder,
+    get_user_llm,
     get_vector_store,
 )
 from app.config import get_settings
-from app.domain.models import StudioOutput, StudioRequest
+from app.domain.models import StudioOutput, StudioRequest, User
 from app.domain.ports.embeddings import EmbeddingProvider
 from app.domain.ports.llm import LLMProvider
 from app.domain.ports.repositories import NotebookRepository, StudioOutputRepository
@@ -42,11 +44,11 @@ def generate_studio(
     notebook_repo: NotebookRepository = Depends(get_notebook_repo),
     studio_repo: StudioOutputRepository = Depends(get_studio_repo),
     vector_store: VectorStore = Depends(get_vector_store),
-    embedder: EmbeddingProvider = Depends(get_embedder),
-    llm: LLMProvider = Depends(get_llm),
+    embedder: EmbeddingProvider = Depends(get_user_embedder),
+    llm: LLMProvider = Depends(get_user_llm),
+    user: User = Depends(get_current_user),
 ) -> StudioOutput:
-    if notebook_repo.get(notebook_id) is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Notebook not found.")
+    assert_notebook_owner(notebook_repo, notebook_id, user)
 
     settings = get_settings()
     generator = GroundedGenerator(
@@ -67,16 +69,24 @@ def generate_studio(
 
 @router.get("/notebooks/{notebook_id}/studio", response_model=list[StudioOutput])
 def list_studio_outputs(
-    notebook_id: uuid.UUID, repo: StudioOutputRepository = Depends(get_studio_repo)
+    notebook_id: uuid.UUID,
+    repo: StudioOutputRepository = Depends(get_studio_repo),
+    notebook_repo: NotebookRepository = Depends(get_notebook_repo),
+    user: User = Depends(get_current_user),
 ) -> list[StudioOutput]:
+    assert_notebook_owner(notebook_repo, notebook_id, user)
     return repo.list_for_notebook(notebook_id)
 
 
 @router.get("/studio/{output_id}", response_model=StudioOutput)
 def get_studio_output(
-    output_id: uuid.UUID, repo: StudioOutputRepository = Depends(get_studio_repo)
+    output_id: uuid.UUID,
+    repo: StudioOutputRepository = Depends(get_studio_repo),
+    notebook_repo: NotebookRepository = Depends(get_notebook_repo),
+    user: User = Depends(get_current_user),
 ) -> StudioOutput:
     out = repo.get(output_id)
     if not out:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Studio output not found")
+    assert_notebook_owner(notebook_repo, out.notebook_id, user)
     return out

@@ -27,11 +27,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sse_starlette.sse import EventSourceResponse
 
 from app.api.deps import (
+    assert_notebook_owner,
     get_conversation_repo,
-    get_embedder,
-    get_llm,
+    get_current_user,
     get_message_repo,
     get_notebook_repo,
+    get_user_embedder,
+    get_user_llm,
     get_vector_store,
 )
 from app.config import get_settings
@@ -40,6 +42,7 @@ from app.domain.models import (
     Conversation,
     Message,
     MessageRole,
+    User,
 )
 from app.domain.ports.embeddings import EmbeddingProvider
 from app.domain.ports.llm import LLMProvider
@@ -62,12 +65,12 @@ def chat(
     conversation_repo: ConversationRepository = Depends(get_conversation_repo),
     message_repo: MessageRepository = Depends(get_message_repo),
     vector_store: VectorStore = Depends(get_vector_store),
-    embedder: EmbeddingProvider = Depends(get_embedder),
-    llm: LLMProvider = Depends(get_llm),
+    embedder: EmbeddingProvider = Depends(get_user_embedder),
+    llm: LLMProvider = Depends(get_user_llm),
+    user: User = Depends(get_current_user),
 ) -> EventSourceResponse:
     """Stream a grounded answer (SSE: meta / token / citation / done / error)."""
-    if notebook_repo.get(notebook_id) is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Notebook not found.")
+    assert_notebook_owner(notebook_repo, notebook_id, user)
 
     # Get-or-create the conversation, scoped to this notebook.
     conversation = _resolve_conversation(
@@ -188,12 +191,23 @@ def _tokenize(text: str) -> Iterator[str]:
 def list_conversations(
     notebook_id: uuid.UUID,
     repo: ConversationRepository = Depends(get_conversation_repo),
+    notebook_repo: NotebookRepository = Depends(get_notebook_repo),
+    user: User = Depends(get_current_user),
 ) -> list[Conversation]:
+    assert_notebook_owner(notebook_repo, notebook_id, user)
     return repo.list_for_notebook(notebook_id)
 
 
 @router.get("/conversations/{conversation_id}/messages", response_model=list[Message])
 def list_messages(
-    conversation_id: uuid.UUID, repo: MessageRepository = Depends(get_message_repo)
+    conversation_id: uuid.UUID,
+    repo: MessageRepository = Depends(get_message_repo),
+    conversation_repo: ConversationRepository = Depends(get_conversation_repo),
+    notebook_repo: NotebookRepository = Depends(get_notebook_repo),
+    user: User = Depends(get_current_user),
 ) -> list[Message]:
+    conversation = conversation_repo.get(conversation_id)
+    if conversation is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Conversation not found.")
+    assert_notebook_owner(notebook_repo, conversation.notebook_id, user)
     return repo.list_for_conversation(conversation_id)

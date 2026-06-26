@@ -1,0 +1,14 @@
+# Railway config for the CloneLM BACKEND service.
+# Create a Railway service with Root Directory = "backend"; Railway reads this
+# file from that root. Nixpacks auto-detects the uv/Python project and installs
+# the DEFAULT dependencies (which include the lightweight `voyageai` client).
+# The heavy local bge-m3 stack lives in the opt-in `embeddings` extra and is
+# deliberately NOT installed here — the hosted build embeds via Voyage AI.
+[build]
+builder = "nixpacks"
+
+[deploy]
+# Apply DB migrations (creates the pgvector extension + schema, idempotent) on
+# every boot, then start the API. Railway injects $PORT.
+startCommand = "uv run alembic upgrade head && uv run uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+restartPolicyType = "ON_FAILURE"

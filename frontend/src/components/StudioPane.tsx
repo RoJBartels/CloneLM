@@ -84,6 +84,7 @@ function ArtifactText({
  * source is ready. Artifacts and manual notes are both manageable here. */
 export default function StudioPane({
   enabled,
+  audioDisabled = false,
   notebookId,
   outputs,
   audios,
@@ -96,6 +97,8 @@ export default function StudioPane({
   onDeleteNote,
 }: {
   enabled: boolean;
+  /** Hosted build: Audio Overview produces no sound, so the tile is greyed out. */
+  audioDisabled?: boolean;
   notebookId: string | null;
   outputs: StudioOutput[];
   audios: AudioOverview[];
@@ -115,6 +118,7 @@ export default function StudioPane({
 
   const generate = async (kind: StudioKind | "audio") => {
     if (!enabled || !notebookId) return;
+    if (kind === "audio" && audioDisabled) return;
     setError(null);
     setPending(kind);
     try {
@@ -135,18 +139,24 @@ export default function StudioPane({
       <h2 className="mb-2 text-lg font-semibold text-studio-600">Studio</h2>
 
       <div className="grid grid-cols-2 gap-2">
-        {TILES.map((t) => (
-          <button
-            key={t.kind}
-            disabled={!enabled || pending !== null}
-            onClick={() => void generate(t.kind)}
-            className={`rounded-md px-2 py-4 text-sm font-medium ring-1 ring-black/10 ${t.cls} ${
-              !enabled ? "cursor-not-allowed opacity-45" : ""
-            }`}
-          >
-            {pending === t.kind ? "…" : t.label}
-          </button>
-        ))}
+        {TILES.map((t) => {
+          const audioOff = audioDisabled && t.kind === "audio";
+          return (
+            <button
+              key={t.kind}
+              disabled={!enabled || pending !== null || audioOff}
+              onClick={() => void generate(t.kind)}
+              title={
+                audioOff ? "Audio-Übersicht ist in der gehosteten Version nicht verfügbar" : undefined
+              }
+              className={`rounded-md px-2 py-4 text-sm font-medium ring-1 ring-black/10 ${t.cls} ${
+                !enabled || audioOff ? "cursor-not-allowed opacity-45" : ""
+              }`}
+            >
+              {pending === t.kind ? "…" : t.label}
+            </button>
+          );
+        })}
       </div>
 
       {error && (

@@ -1,15 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { api } from "./api/client";
+import { api, clearAuthToken, getAuthToken, onUnauthorized } from "./api/client";
 import type {
   AddSourceInput,
+  AppConfig,
   AudioOverview,
+  AuthUser,
   Note,
   Notebook,
   Source,
   StudioKind,
   StudioOutput,
 } from "./api/types";
+import AuthView from "./components/AuthView";
 import ChatPane from "./components/ChatPane";
 import SourcesPane from "./components/SourcesPane";
 import StudioPane from "./components/StudioPane";
@@ -24,7 +27,15 @@ const POLL_TIMEOUT_MS = 60000;
  * status is polled after an add-source call until every source reaches a
  * terminal state (`ready` or `error`) or the poll window times out.
  */
-export default function App() {
+function NotebookApp({
+  deployed,
+  userEmail,
+  onLogout,
+}: {
+  deployed: boolean;
+  userEmail: string | null;
+  onLogout: () => void;
+}) {
   const [notebook, setNotebook] = useState<Notebook | null>(null);
   const [notebooks, setNotebooks] = useState<Notebook[]>([]);
   const [bootError, setBootError] = useState<string | null>(null);
@@ -313,6 +324,8 @@ export default function App() {
         onRenameNotebook={(id, title) => void handleRenameNotebook(id, title)}
         onDeleteNotebook={(id) => void handleDeleteNotebook(id)}
         onOpenLibrary={() => void refreshNotebooks()}
+        userEmail={userEmail}
+        onLogout={onLogout}
       />
       {bootError && (
         <p className="bg-danger-100 px-4 py-2 text-sm text-danger-500">{bootError}</p>
@@ -338,6 +351,7 @@ export default function App() {
         />
         <StudioPane
           enabled={hasReadySource}
+          audioDisabled={deployed}
           notebookId={notebook?.id ?? null}
           outputs={outputs}
           audios={audios}
@@ -351,5 +365,66 @@ export default function App() {
         />
       </main>
     </div>
+  );
+}
+
+/**
+ * Auth gate. Fetches the public config: localhost (deployed=false) renders the
+ * app directly (no login). The hosted build requires a valid session — it
+ * validates any stored token via /me, shows the login/register screen when
+ * absent, and drops back to it on a 401.
+ */
+export default function App() {
+  const [config, setConfig] = useState<AppConfig | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    onUnauthorized(() => alive && setUser(null));
+    (async () => {
+      try {
+        const cfg = await api.getConfig();
+        if (!alive) return;
+        setConfig(cfg);
+        if (cfg.deployed && getAuthToken()) {
+          // Validate the stored token; ignore failure (drops to login).
+          try {
+            setUser(await api.me());
+          } catch {
+            clearAuthToken();
+          }
+        }
+      } catch {
+        // No config endpoint reachable — assume localhost so dev still works.
+        if (alive) setConfig({ deployed: false });
+      } finally {
+        if (alive) setReady(true);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  if (!ready || !config) {
+    return <div className="flex h-full items-center justify-center bg-src-100 text-chrome-500">…</div>;
+  }
+
+  if (config.deployed && !user) {
+    return <AuthView onAuthenticated={setUser} />;
+  }
+
+  const handleLogout = () => {
+    clearAuthToken();
+    setUser(null);
+  };
+
+  return (
+    <NotebookApp
+      deployed={config.deployed}
+      userEmail={user?.email ?? null}
+      onLogout={handleLogout}
+    />
   );
 }

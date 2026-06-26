@@ -126,17 +126,55 @@ export interface LLMSettings {
   llm_model: string;
   /** Whether an Anthropic key is stored. The key itself is never returned. */
   anthropic_api_key_set: boolean;
+  /** Deployed build: whether the user's Voyage key is stored. */
+  voyage_api_key_set: boolean;
   ollama_base_url: string;
   ollama_model: string;
   ollama_available: boolean;
+  /** Hosted build: the local-model (Ollama) option is hidden and embeddings
+   * run on Voyage AI. */
+  deployed: boolean;
 }
 
 export interface LLMSettingsUpdate {
   llm_provider?: LLMProviderChoice;
   /** Send a non-empty value to set/replace the key; omit/blank to keep it. */
   anthropic_api_key?: string;
+  voyage_api_key?: string;
   ollama_base_url?: string;
   ollama_model?: string;
+}
+
+// --- Auth (deployed/multi-user build) ---
+
+export interface AppConfig {
+  /** Hosted build: accounts + login required, per-user keys, Voyage embeddings. */
+  deployed: boolean;
+}
+
+export interface AuthUser {
+  id: string;
+  email: string;
+  created_at: string;
+}
+
+export interface AuthResponse {
+  access_token: string;
+  token_type: string;
+  user: AuthUser;
+}
+
+export interface RegisterInput {
+  email: string;
+  password: string;
+  anthropic_api_key: string;
+  /** Required in the deployed build (embeddings run on the user's Voyage key). */
+  voyage_api_key?: string;
+}
+
+export interface LoginInput {
+  email: string;
+  password: string;
 }
 
 // --- chat (SSE) ---

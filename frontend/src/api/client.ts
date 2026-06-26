@@ -6,31 +6,68 @@
  */
 import type {
   AddSourceInput,
+  AppConfig,
   AudioOverview,
+  AuthResponse,
+  AuthUser,
   ChatRequest,
   ChatStreamHandlers,
   Conversation,
   Health,
   LLMSettings,
   LLMSettingsUpdate,
+  LoginInput,
   Message,
   Note,
   NoteCreate,
   NoteUpdate,
   Notebook,
+  RegisterInput,
   Source,
   StudioKind,
   StudioOutput,
 } from "./types";
 
 const BASE = import.meta.env.VITE_API_BASE ?? "";
+const TOKEN_KEY = "clonelm.token";
+
+// --- Auth token (deployed build) -----------------------------------------
+// Bearer token in localStorage, attached to every request. On a 401 we clear
+// it and notify the app so it can drop back to the login screen.
+let _onUnauthorized: (() => void) | null = null;
+
+export function getAuthToken(): string | null {
+  return localStorage.getItem(TOKEN_KEY);
+}
+export function setAuthToken(token: string): void {
+  localStorage.setItem(TOKEN_KEY, token);
+}
+export function clearAuthToken(): void {
+  localStorage.removeItem(TOKEN_KEY);
+}
+export function onUnauthorized(cb: () => void): void {
+  _onUnauthorized = cb;
+}
+
+function authHeaders(extra?: HeadersInit): HeadersInit {
+  const token = getAuthToken();
+  return token ? { ...(extra ?? {}), Authorization: `Bearer ${token}` } : (extra ?? {});
+}
+
+function handleUnauthorized(status: number): void {
+  if (status === 401) {
+    clearAuthToken();
+    _onUnauthorized?.();
+  }
+}
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(BASE + path, {
-    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+    headers: authHeaders({ "Content-Type": "application/json", ...(init?.headers ?? {}) }),
     ...init,
   });
   if (!res.ok) {
+    handleUnauthorized(res.status);
     const detail = await res.text().catch(() => "");
     throw new Error(`${res.status} ${res.statusText}${detail ? `: ${detail}` : ""}`);
   }
@@ -44,9 +81,11 @@ async function reqForm<T>(path: string, form: FormData, init?: RequestInit): Pro
   const res = await fetch(BASE + path, {
     method: "POST",
     body: form,
+    headers: authHeaders(init?.headers),
     ...init,
   });
   if (!res.ok) {
+    handleUnauthorized(res.status);
     const detail = await res.text().catch(() => "");
     throw new Error(`${res.status} ${res.statusText}${detail ? `: ${detail}` : ""}`);
   }
@@ -78,11 +117,12 @@ async function streamChat(
 ): Promise<void> {
   const res = await fetch(`${BASE}/api/notebooks/${notebookId}/chat`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(body),
     signal,
   });
   if (!res.ok || !res.body) {
+    handleUnauthorized(res.status);
     const detail = await res.text().catch(() => "");
     const message = `${res.status} ${res.statusText}${detail ? `: ${detail}` : ""}`;
     handlers.onError?.({ message });
@@ -173,7 +213,15 @@ async function streamChat(
 }
 
 export const api = {
-  // --- settings (LLM provider management) ---
+  // --- auth / config (deployed build) ---
+  getConfig: () => req<AppConfig>("/api/config"),
+  register: (body: RegisterInput) =>
+    req<AuthResponse>("/api/auth/register", { method: "POST", body: JSON.stringify(body) }),
+  login: (body: LoginInput) =>
+    req<AuthResponse>("/api/auth/login", { method: "POST", body: JSON.stringify(body) }),
+  me: () => req<AuthUser>("/api/auth/me"),
+
+  // --- settings (LLM provider / per-user key management) ---
   getSettings: () => req<LLMSettings>("/api/settings"),
   updateSettings: (body: LLMSettingsUpdate) =>
     req<LLMSettings>("/api/settings", { method: "PUT", body: JSON.stringify(body) }),

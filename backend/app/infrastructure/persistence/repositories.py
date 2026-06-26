@@ -27,6 +27,7 @@ from app.domain.models import (
     SourceType,
     StudioKind,
     StudioOutput,
+    User,
 )
 from app.domain.ports.repositories import (
     AudioRepository,
@@ -37,6 +38,7 @@ from app.domain.ports.repositories import (
     NotebookRepository,
     SourceRepository,
     StudioOutputRepository,
+    UserRepository,
 )
 from app.infrastructure.persistence import orm
 
@@ -77,6 +79,72 @@ def _citation(o: orm.CitationORM) -> Citation:
 
 
 # --------------------------------------------------------------------------- #
+# User
+# --------------------------------------------------------------------------- #
+
+
+def _user(o: orm.UserORM) -> User:
+    return User(
+        id=o.id,
+        email=o.email,
+        password_hash=o.password_hash,
+        anthropic_key_encrypted=o.anthropic_key_encrypted,
+        voyage_key_encrypted=o.voyage_key_encrypted,
+        created_at=o.created_at,
+    )
+
+
+class SqlUserRepository(UserRepository):
+    def __init__(self, db: Session) -> None:
+        self.db = db
+
+    def create(
+        self,
+        *,
+        email: str,
+        password_hash: str,
+        anthropic_key_encrypted: str | None,
+        voyage_key_encrypted: str | None,
+    ) -> User:
+        o = orm.UserORM(
+            email=email,
+            password_hash=password_hash,
+            anthropic_key_encrypted=anthropic_key_encrypted,
+            voyage_key_encrypted=voyage_key_encrypted,
+        )
+        self.db.add(o)
+        self.db.commit()
+        self.db.refresh(o)
+        return _user(o)
+
+    def get(self, user_id: uuid.UUID) -> User | None:
+        o = self.db.get(orm.UserORM, user_id)
+        return _user(o) if o else None
+
+    def get_by_email(self, email: str) -> User | None:
+        o = self.db.scalar(select(orm.UserORM).where(orm.UserORM.email == email))
+        return _user(o) if o else None
+
+    def update_keys(
+        self,
+        user_id: uuid.UUID,
+        *,
+        anthropic_key_encrypted: str | None = None,
+        voyage_key_encrypted: str | None = None,
+    ) -> User | None:
+        o = self.db.get(orm.UserORM, user_id)
+        if not o:
+            return None
+        if anthropic_key_encrypted is not None:
+            o.anthropic_key_encrypted = anthropic_key_encrypted
+        if voyage_key_encrypted is not None:
+            o.voyage_key_encrypted = voyage_key_encrypted
+        self.db.commit()
+        self.db.refresh(o)
+        return _user(o)
+
+
+# --------------------------------------------------------------------------- #
 # Notebook
 # --------------------------------------------------------------------------- #
 
@@ -104,8 +172,8 @@ class SqlNotebookRepository(NotebookRepository):
             note_count=note_count or 0,
         )
 
-    def create(self, title: str) -> Notebook:
-        o = orm.NotebookORM(title=title)
+    def create(self, title: str, *, user_id: uuid.UUID) -> Notebook:
+        o = orm.NotebookORM(title=title, user_id=user_id)
         self.db.add(o)
         self.db.commit()
         self.db.refresh(o)
@@ -115,9 +183,16 @@ class SqlNotebookRepository(NotebookRepository):
         o = self.db.get(orm.NotebookORM, notebook_id)
         return self._to_domain(o) if o else None
 
-    def list(self) -> list[Notebook]:
+    def owner_id(self, notebook_id: uuid.UUID) -> uuid.UUID | None:
+        return self.db.scalar(
+            select(orm.NotebookORM.user_id).where(orm.NotebookORM.id == notebook_id)
+        )
+
+    def list_for_user(self, user_id: uuid.UUID) -> list[Notebook]:
         rows = self.db.scalars(
-            select(orm.NotebookORM).order_by(orm.NotebookORM.created_at.desc())
+            select(orm.NotebookORM)
+            .where(orm.NotebookORM.user_id == user_id)
+            .order_by(orm.NotebookORM.created_at.desc())
         ).all()
         return [self._to_domain(o) for o in rows]
 

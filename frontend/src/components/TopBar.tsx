@@ -16,6 +16,8 @@ export default function TopBar({
   onRenameNotebook,
   onDeleteNotebook,
   onOpenLibrary,
+  userEmail,
+  onLogout,
 }: {
   notebooks: Notebook[];
   activeNotebookId: string | null;
@@ -25,6 +27,9 @@ export default function TopBar({
   onRenameNotebook: (id: string, title: string) => void;
   onDeleteNotebook: (id: string) => void;
   onOpenLibrary: () => void;
+  /** Hosted build only: the signed-in account + a logout action. */
+  userEmail?: string | null;
+  onLogout?: () => void;
 }) {
   const [health, setHealth] = useState<HealthState>("checking");
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -84,6 +89,19 @@ export default function TopBar({
         >
           Einstellungen
         </button>
+        {userEmail && onLogout && (
+          <div className="ml-1 flex items-center gap-2 border-l border-chrome-400 pl-3">
+            <span className="max-w-[12rem] truncate text-xs text-chrome-600" title={userEmail}>
+              {userEmail}
+            </span>
+            <button
+              onClick={onLogout}
+              className="rounded-md bg-white px-3 py-1.5 text-sm text-chrome-700 ring-1 ring-chrome-400 hover:bg-chrome-50"
+            >
+              Abmelden
+            </button>
+          </div>
+        )}
       </div>
 
       {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}

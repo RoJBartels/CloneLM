@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 from app import __version__
 from app.api.routes import (
     audio,
+    auth,
     chat,
     health,
     notebooks,
@@ -50,6 +51,7 @@ def create_app() -> FastAPI:
 
     # --- Routers (one line per feature module) ---
     app.include_router(health.router)
+    app.include_router(auth.router)
     app.include_router(notebooks.router)
     app.include_router(sources.router)
     app.include_router(chat.router)

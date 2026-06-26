@@ -27,18 +27,51 @@ from app.domain.models import (
     SourceType,
     StudioKind,
     StudioOutput,
+    User,
 )
+
+
+class UserRepository(ABC):
+    @abstractmethod
+    def create(
+        self,
+        *,
+        email: str,
+        password_hash: str,
+        anthropic_key_encrypted: str | None,
+        voyage_key_encrypted: str | None,
+    ) -> User: ...
+
+    @abstractmethod
+    def get(self, user_id: uuid.UUID) -> User | None: ...
+
+    @abstractmethod
+    def get_by_email(self, email: str) -> User | None: ...
+
+    @abstractmethod
+    def update_keys(
+        self,
+        user_id: uuid.UUID,
+        *,
+        anthropic_key_encrypted: str | None = None,
+        voyage_key_encrypted: str | None = None,
+    ) -> User | None:
+        """Update only the provided (non-None) encrypted keys; leave others."""
 
 
 class NotebookRepository(ABC):
     @abstractmethod
-    def create(self, title: str) -> Notebook: ...
+    def create(self, title: str, *, user_id: uuid.UUID) -> Notebook: ...
 
     @abstractmethod
     def get(self, notebook_id: uuid.UUID) -> Notebook | None: ...
 
     @abstractmethod
-    def list(self) -> list[Notebook]: ...
+    def owner_id(self, notebook_id: uuid.UUID) -> uuid.UUID | None:
+        """The owning user's id, or None if the notebook doesn't exist."""
+
+    @abstractmethod
+    def list_for_user(self, user_id: uuid.UUID) -> list[Notebook]: ...
 
     @abstractmethod
     def update(self, notebook_id: uuid.UUID, title: str) -> Notebook | None: ...

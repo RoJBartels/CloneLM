@@ -15,6 +15,7 @@ export default function SettingsModal({ onClose }: { onClose: () => void }) {
 
   const [provider, setProvider] = useState<LLMProviderChoice>("anthropic");
   const [apiKey, setApiKey] = useState("");
+  const [voyageKey, setVoyageKey] = useState("");
   const [ollamaUrl, setOllamaUrl] = useState("");
   const [ollamaModel, setOllamaModel] = useState("");
 
@@ -28,7 +29,8 @@ export default function SettingsModal({ onClose }: { onClose: () => void }) {
       .then((s) => {
         setSettings(s);
         if (!probe) {
-          setProvider(s.llm_provider);
+          // Deployed build offers no local model — Anthropic is the only option.
+          setProvider(s.deployed ? "anthropic" : s.llm_provider);
           setOllamaUrl(s.ollama_base_url);
           setOllamaModel(s.ollama_model);
         }
@@ -49,6 +51,7 @@ export default function SettingsModal({ onClose }: { onClose: () => void }) {
     try {
       const body: LLMSettingsUpdate = { llm_provider: provider };
       if (provider === "anthropic" && apiKey.trim()) body.anthropic_api_key = apiKey.trim();
+      if (settings?.deployed && voyageKey.trim()) body.voyage_api_key = voyageKey.trim();
       if (provider === "ollama") {
         body.ollama_base_url = ollamaUrl.trim();
         body.ollama_model = ollamaModel.trim();
@@ -56,6 +59,7 @@ export default function SettingsModal({ onClose }: { onClose: () => void }) {
       const updated = await api.updateSettings(body);
       setSettings(updated);
       setApiKey("");
+      setVoyageKey("");
       setSaved(true);
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : "Speichern fehlgeschlagen");
@@ -77,43 +81,61 @@ export default function SettingsModal({ onClose }: { onClose: () => void }) {
 
       {settings && (
         <div className="space-y-5">
-          <fieldset className="space-y-2">
-            <legend className="mb-1 text-sm font-semibold text-chrome-900">LLM-Anbieter</legend>
+          {settings.deployed ? (
+            <p className="rounded-md bg-studio-100 px-3 py-2 text-xs text-chrome-700">
+              Gehostete Version: Antworten kommen von Anthropic (Claude), die
+              Quellen werden mit Voyage AI eingebettet. Ein lokales Modell ist hier
+              nicht verfügbar. Der Voyage-Schlüssel wird serverseitig gesetzt
+              (VOYAGE_API_KEY) —{" "}
+              <a
+                href="https://dash.voyageai.com"
+                target="_blank"
+                rel="noreferrer"
+                className="text-src-600 underline hover:text-src-700"
+              >
+                dash.voyageai.com
+              </a>
+              .
+            </p>
+          ) : (
+            <fieldset className="space-y-2">
+              <legend className="mb-1 text-sm font-semibold text-chrome-900">LLM-Anbieter</legend>
 
-            <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-chrome-400 p-3 hover:bg-chrome-50">
-              <input
-                type="radio"
-                name="provider"
-                className="mt-1"
-                checked={provider === "anthropic"}
-                onChange={() => setProvider("anthropic")}
-              />
-              <span>
-                <span className="block text-sm font-medium text-chrome-900">Anthropic (Claude)</span>
-                <span className="block text-xs text-chrome-600">
-                  Gehostetes Modell ({settings.llm_model}). Benötigt einen API-Schlüssel.
+              <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-chrome-400 p-3 hover:bg-chrome-50">
+                <input
+                  type="radio"
+                  name="provider"
+                  className="mt-1"
+                  checked={provider === "anthropic"}
+                  onChange={() => setProvider("anthropic")}
+                />
+                <span>
+                  <span className="block text-sm font-medium text-chrome-900">Anthropic (Claude)</span>
+                  <span className="block text-xs text-chrome-600">
+                    Gehostetes Modell ({settings.llm_model}). Benötigt einen API-Schlüssel.
+                  </span>
                 </span>
-              </span>
-            </label>
+              </label>
 
-            <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-chrome-400 p-3 hover:bg-chrome-50">
-              <input
-                type="radio"
-                name="provider"
-                className="mt-1"
-                checked={provider === "ollama"}
-                onChange={() => setProvider("ollama")}
-              />
-              <span>
-                <span className="block text-sm font-medium text-chrome-900">
-                  Open Source (Ollama, lokal)
+              <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-chrome-400 p-3 hover:bg-chrome-50">
+                <input
+                  type="radio"
+                  name="provider"
+                  className="mt-1"
+                  checked={provider === "ollama"}
+                  onChange={() => setProvider("ollama")}
+                />
+                <span>
+                  <span className="block text-sm font-medium text-chrome-900">
+                    Open Source (Ollama, lokal)
+                  </span>
+                  <span className="block text-xs text-chrome-600">
+                    Läuft offline auf deinem Rechner. Kein API-Schlüssel nötig.
+                  </span>
                 </span>
-                <span className="block text-xs text-chrome-600">
-                  Läuft offline auf deinem Rechner. Kein API-Schlüssel nötig.
-                </span>
-              </span>
-            </label>
-          </fieldset>
+              </label>
+            </fieldset>
+          )}
 
           {provider === "anthropic" ? (
             <div className="space-y-1.5">
@@ -137,6 +159,17 @@ export default function SettingsModal({ onClose }: { onClose: () => void }) {
                 {settings.anthropic_api_key_set
                   ? "Ein Schlüssel ist gespeichert. Gib einen neuen ein, um ihn zu ersetzen."
                   : "Noch kein Schlüssel gespeichert."}
+              </p>
+              <p className="text-xs text-chrome-500">
+                Schlüssel erstellen:{" "}
+                <a
+                  href="https://console.anthropic.com/settings/keys"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-src-600 underline hover:text-src-700"
+                >
+                  console.anthropic.com/settings/keys
+                </a>
               </p>
               {usingFakeFallback && (
                 <p className="rounded-md bg-studio-100 px-3 py-2 text-xs text-chrome-700">
@@ -197,6 +230,38 @@ export default function SettingsModal({ onClose }: { onClose: () => void }) {
                   <code className="rounded bg-white px-1">ollama pull llama3.1</code>.
                 </p>
               )}
+            </div>
+          )}
+
+          {settings.deployed && (
+            <div className="space-y-1.5">
+              <label className="block text-sm font-medium text-chrome-900" htmlFor="voyage-key">
+                Voyage API-Schlüssel (Einbettungen)
+              </label>
+              <input
+                id="voyage-key"
+                type="password"
+                autoComplete="off"
+                value={voyageKey}
+                onChange={(e) => setVoyageKey(e.target.value)}
+                placeholder={
+                  settings.voyage_api_key_set
+                    ? "•••••••••• (gespeichert — leer lassen zum Beibehalten)"
+                    : "pa-…"
+                }
+                className="w-full rounded-md border border-chrome-400 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-src-600"
+              />
+              <p className="text-xs text-chrome-500">
+                Schlüssel erstellen:{" "}
+                <a
+                  href="https://dash.voyageai.com"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-src-600 underline hover:text-src-700"
+                >
+                  dash.voyageai.com
+                </a>
+              </p>
             </div>
           )}
 

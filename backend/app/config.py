@@ -11,6 +11,7 @@ import os
 from functools import lru_cache
 from pathlib import Path
 
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # The .env lives at the backend package root (backend/.env), next to pyproject.
@@ -28,6 +29,16 @@ class Settings(BaseSettings):
     app_host: str = "0.0.0.0"
     app_port: int = 8000
     cors_origins: str = "http://localhost:5173"
+
+    # Deployment mode. The single switch between the local and hosted builds:
+    #   False (localhost): bge-m3 embeddings run locally; the user may also pick
+    #          a local open-source LLM (Ollama) from the Settings UI.
+    #   True  (deployed, e.g. Railway): embeddings come from Voyage AI (a hosted
+    #          API, no GPU needed); the LLM is Anthropic only — the local-model
+    #          option is hidden so there is nothing local to run.
+    # The embedding model is NOT user-selectable: it is derived from this flag so
+    # a notebook's vectors can never be mixed across embedding models.
+    deployed: bool = False
 
     # --- Database ---
     database_url: str = "postgresql+psycopg://clonelm:clonelm@localhost:5432/clonelm"
@@ -50,9 +61,32 @@ class Settings(BaseSettings):
     studio_max_tokens: int = 4096
 
     # --- Embeddings provider selection ---
+    # Not user-selectable — chosen from `deployed` (see effective_embedding_provider)
+    # so the vector space stays consistent within a notebook. bge-m3 (local) and
+    # voyage-3.5 (hosted) both emit 1024-dim vectors, so the pgvector column size
+    # (embedding_dim) — and therefore the schema — is identical in both modes.
     embedding_provider: str = "bge_m3_local"  # bge_m3_local | fake
     embedding_model: str = "BAAI/bge-m3"
     embedding_dim: int = 1024
+
+    # Hosted embeddings via Voyage AI (an Anthropic company), used when deployed.
+    # In the multi-user deployed build the key is per-user (not read from here);
+    # this server-level value is only the localhost/single-tenant fallback.
+    # voyage-3.5 defaults to 1024-dim output, matching embedding_dim above.
+    voyage_api_key: str = ""
+    voyage_model: str = "voyage-3.5"
+
+    # --- Auth (deployed build only; see DEPLOYED) ---
+    # JWT signing secret and the Fernet master key that encrypts users' API keys
+    # at rest. REQUIRED when deployed (validated below) — generate strong random
+    # values and set them as env vars; never commit. A Fernet key is a urlsafe
+    # base64-encoded 32-byte value (see SECRET_ENCRYPTION_KEY in .env.example).
+    jwt_secret: str = ""
+    secret_encryption_key: str = ""
+    jwt_expire_minutes: int = 60 * 24 * 7  # 7 days
+    # Probe each API key with a tiny live request at registration to reject bad
+    # keys early. Disabled in tests (fake providers) and toggleable for offline use.
+    registration_verify_keys: bool = True
 
     # --- TTS provider selection ---
     tts_provider: str = "piper"  # piper | fake
@@ -71,17 +105,58 @@ class Settings(BaseSettings):
     chunk_overlap: int = 64
     chunk_strategy: str = "token_sliding_v1"
 
+    @field_validator("database_url")
+    @classmethod
+    def _coerce_psycopg_driver(cls, v: str) -> str:
+        """Hosting platforms (Railway, Heroku, …) hand out ``postgres://`` or
+        ``postgresql://`` URLs, but this app talks to Postgres through psycopg v3,
+        which needs the explicit ``postgresql+psycopg://`` scheme. Rewrite so the
+        platform's DATABASE_URL can be pasted in verbatim."""
+        for prefix in ("postgresql+psycopg://",):
+            if v.startswith(prefix):
+                return v
+        if v.startswith("postgresql://"):
+            return "postgresql+psycopg://" + v[len("postgresql://") :]
+        if v.startswith("postgres://"):
+            return "postgresql+psycopg://" + v[len("postgres://") :]
+        return v
+
+    @model_validator(mode="after")
+    def _require_auth_secrets_when_deployed(self) -> "Settings":
+        """Fail fast: the deployed (multi-user) build cannot run safely without a
+        JWT secret and an encryption master key. Catch the misconfiguration at
+        startup instead of at the first login/registration."""
+        if self.deployed and not (self.jwt_secret and self.secret_encryption_key):
+            raise ValueError(
+                "DEPLOYED=true requires JWT_SECRET and SECRET_ENCRYPTION_KEY to be "
+                "set (see .env.example / RAILWAY.md)."
+            )
+        return self
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
 
     @property
     def effective_llm_provider(self) -> str:
-        """Fall back to the fake LLM when Anthropic is selected but no key is set,
-        so the app boots and the full UI loop works in development."""
-        if self.llm_provider == "anthropic" and not self.anthropic_api_key:
+        """The LLM provider actually bound. In deployed mode only Anthropic is
+        offered (there is no local Ollama to run on a hosted box). When Anthropic
+        is selected but no key is set, fall back to the fake LLM so the app still
+        boots and the full UI loop works."""
+        provider = "anthropic" if self.deployed else self.llm_provider
+        if provider == "anthropic" and not self.anthropic_api_key:
             return "fake"
-        return self.llm_provider
+        return provider
+
+    @property
+    def effective_embedding_provider(self) -> str:
+        """Which embedding adapter to bind, derived from deployment mode (never a
+        free user choice — see `deployed`). Deployed -> Voyage AI, falling back to
+        the deterministic fake provider if no Voyage key is set so the app still
+        boots. Localhost -> the configured local provider (bge-m3)."""
+        if self.deployed:
+            return "voyage" if self.voyage_api_key else "fake"
+        return self.embedding_provider
 
     @property
     def effective_heavy_model(self) -> str:

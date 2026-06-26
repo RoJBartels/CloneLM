@@ -10,8 +10,13 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.api.deps import get_note_repo, get_notebook_repo
-from app.domain.models import Note, NoteCreate, NoteUpdate
+from app.api.deps import (
+    assert_notebook_owner,
+    get_current_user,
+    get_note_repo,
+    get_notebook_repo,
+)
+from app.domain.models import Note, NoteCreate, NoteUpdate, User
 from app.domain.ports.repositories import NoteRepository, NotebookRepository
 
 router = APIRouter(prefix="/api", tags=["notes"])
@@ -27,9 +32,9 @@ def create_note(
     body: NoteCreate,
     notebook_repo: NotebookRepository = Depends(get_notebook_repo),
     repo: NoteRepository = Depends(get_note_repo),
+    user: User = Depends(get_current_user),
 ) -> Note:
-    if not notebook_repo.get(notebook_id):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Notebook not found")
+    assert_notebook_owner(notebook_repo, notebook_id, user)
     content = body.content
     if body.source_ref:
         # No dedicated column for source_ref; fold it into the note content as
@@ -45,8 +50,12 @@ def create_note(
 
 @router.get("/notebooks/{notebook_id}/notes", response_model=list[Note])
 def list_notes(
-    notebook_id: uuid.UUID, repo: NoteRepository = Depends(get_note_repo)
+    notebook_id: uuid.UUID,
+    repo: NoteRepository = Depends(get_note_repo),
+    notebook_repo: NotebookRepository = Depends(get_notebook_repo),
+    user: User = Depends(get_current_user),
 ) -> list[Note]:
+    assert_notebook_owner(notebook_repo, notebook_id, user)
     return repo.list_for_notebook(notebook_id)
 
 
@@ -55,7 +64,13 @@ def update_note(
     note_id: uuid.UUID,
     body: NoteUpdate,
     repo: NoteRepository = Depends(get_note_repo),
+    notebook_repo: NotebookRepository = Depends(get_notebook_repo),
+    user: User = Depends(get_current_user),
 ) -> Note:
+    existing = repo.get(note_id)
+    if not existing:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Note not found")
+    assert_notebook_owner(notebook_repo, existing.notebook_id, user)
     note = repo.update(note_id, title=body.title, content=body.content)
     if not note:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Note not found")
@@ -64,7 +79,13 @@ def update_note(
 
 @router.delete("/notes/{note_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_note(
-    note_id: uuid.UUID, repo: NoteRepository = Depends(get_note_repo)
+    note_id: uuid.UUID,
+    repo: NoteRepository = Depends(get_note_repo),
+    notebook_repo: NotebookRepository = Depends(get_notebook_repo),
+    user: User = Depends(get_current_user),
 ) -> None:
-    if not repo.delete(note_id):
+    existing = repo.get(note_id)
+    if not existing:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Note not found")
+    assert_notebook_owner(notebook_repo, existing.notebook_id, user)
+    repo.delete(note_id)

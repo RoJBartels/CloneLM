@@ -10,9 +10,16 @@ import uuid
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 
-from app.api.deps import get_chunk_repo, get_embedder, get_notebook_repo, get_source_repo
+from app.api.deps import (
+    assert_notebook_owner,
+    get_chunk_repo,
+    get_current_user,
+    get_notebook_repo,
+    get_source_repo,
+    get_user_embedder,
+)
 from app.config import get_settings
-from app.domain.models import Source, SourceType
+from app.domain.models import Source, SourceType, User
 from app.domain.ports.embeddings import EmbeddingProvider
 from app.domain.ports.repositories import ChunkRepository, NotebookRepository, SourceRepository
 from app.services.ingestion.service import IngestionService
@@ -36,13 +43,13 @@ async def add_source(
     notebook_repo: NotebookRepository = Depends(get_notebook_repo),
     source_repo: SourceRepository = Depends(get_source_repo),
     chunk_repo: ChunkRepository = Depends(get_chunk_repo),
-    embedder: EmbeddingProvider = Depends(get_embedder),
+    embedder: EmbeddingProvider = Depends(get_user_embedder),
+    user: User = Depends(get_current_user),
 ) -> Source:
     """Add a source (file/paste/url) and ingest it inline: parse -> chunk ->
     embed -> persist. Returns the Source with status=ready or status=error
     (parse/embed failures do not 500 — they surface via the status field)."""
-    if not notebook_repo.get(notebook_id):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Notebook not found")
+    assert_notebook_owner(notebook_repo, notebook_id, user)
 
     file_bytes: bytes | None = None
     filename: str | None = None
@@ -79,24 +86,38 @@ async def add_source(
 
 @router.get("/notebooks/{notebook_id}/sources", response_model=list[Source])
 def list_sources(
-    notebook_id: uuid.UUID, repo: SourceRepository = Depends(get_source_repo)
+    notebook_id: uuid.UUID,
+    repo: SourceRepository = Depends(get_source_repo),
+    notebook_repo: NotebookRepository = Depends(get_notebook_repo),
+    user: User = Depends(get_current_user),
 ) -> list[Source]:
+    assert_notebook_owner(notebook_repo, notebook_id, user)
     return repo.list_for_notebook(notebook_id)
 
 
 @router.get("/sources/{source_id}", response_model=Source)
 def get_source(
-    source_id: uuid.UUID, repo: SourceRepository = Depends(get_source_repo)
+    source_id: uuid.UUID,
+    repo: SourceRepository = Depends(get_source_repo),
+    notebook_repo: NotebookRepository = Depends(get_notebook_repo),
+    user: User = Depends(get_current_user),
 ) -> Source:
     src = repo.get(source_id)
     if not src:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Source not found")
+    assert_notebook_owner(notebook_repo, src.notebook_id, user)
     return src
 
 
 @router.delete("/sources/{source_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_source(
-    source_id: uuid.UUID, repo: SourceRepository = Depends(get_source_repo)
+    source_id: uuid.UUID,
+    repo: SourceRepository = Depends(get_source_repo),
+    notebook_repo: NotebookRepository = Depends(get_notebook_repo),
+    user: User = Depends(get_current_user),
 ) -> None:
-    if not repo.delete(source_id):
+    src = repo.get(source_id)
+    if not src:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Source not found")
+    assert_notebook_owner(notebook_repo, src.notebook_id, user)
+    repo.delete(source_id)
