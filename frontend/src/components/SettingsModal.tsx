@@ -85,17 +85,8 @@ export default function SettingsModal({ onClose }: { onClose: () => void }) {
             <p className="rounded-md bg-studio-100 px-3 py-2 text-xs text-chrome-700">
               Gehostete Version: Antworten kommen von Anthropic (Claude), die
               Quellen werden mit Voyage AI eingebettet. Ein lokales Modell ist hier
-              nicht verfügbar. Der Voyage-Schlüssel wird serverseitig gesetzt
-              (VOYAGE_API_KEY) —{" "}
-              <a
-                href="https://dash.voyageai.com"
-                target="_blank"
-                rel="noreferrer"
-                className="text-src-600 underline hover:text-src-700"
-              >
-                dash.voyageai.com
-              </a>
-              .
+              nicht verfügbar. Verwalte unten deine eigenen Schlüssel — sie werden
+              verschlüsselt gespeichert.
             </p>
           ) : (
             <fieldset className="space-y-2">
