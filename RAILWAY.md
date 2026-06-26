@@ -1,13 +1,20 @@
 # Deploying CloneLM to Railway
 
 CloneLM deploys as **three Railway components in one project**, built straight
-from this Git repo via Nixpacks — no Dockerfile:
+from this Git repo by Railway's default builder (**Railpack**) — no Dockerfile:
 
 | Component | Source | Notes |
 | --- | --- | --- |
 | **Postgres + pgvector** | template | the data + vector store |
 | **backend** | `backend/` | FastAPI; embeds via **Voyage AI** in this mode |
 | **frontend** | `frontend/` | React/Vite static bundle served by `serve` |
+
+> ⚠️ **Set each service's Root Directory** (`backend` / `frontend`) in the Railway
+> UI. This is what makes Railway detect that service's `railway.toml` and project
+> files — without it Railpack analyzes the repo **root** (no project there) and the
+> build fails. The `railway.toml` files intentionally set **no** `builder`, so
+> Railpack auto-detects uv/Python and Node (pinning Nixpacks fails on uv projects
+> unless `$NIXPACKS_UV_VERSION` is set).
 
 The hosted build flips `DEPLOYED=true`, which makes the app **multi-user**:
 accounts + login are required, each user brings their **own** Anthropic + Voyage

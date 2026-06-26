@@ -1,13 +1,13 @@
 # Railway config for the CloneLM FRONTEND service.
-# Create a Railway service with Root Directory = "frontend"; Railway reads this
-# file from that root. Nixpacks detects the Node/Vite app, runs the build, and
-# serves the static bundle.
 #
-# IMPORTANT: set VITE_API_BASE (the backend's public URL) as a service variable
-# BEFORE building — Vite inlines it into the bundle at build time, so changing it
-# later requires a redeploy.
+# Set the service's Root Directory to "frontend" in the Railway UI so this file is
+# detected and the Node/Vite app is found here (not the monorepo root).
+#
+# No `builder` is set on purpose: Railway's default builder (Railpack) auto-detects
+# the Node app. Set VITE_API_BASE (the backend's public URL) as a BUILD-TIME service
+# variable — Vite inlines it into the bundle, so changing it later needs a redeploy.
+
 [build]
-builder = "nixpacks"
 buildCommand = "npm run build"
 
 [deploy]

@@ -1,11 +1,14 @@
 # Railway config for the CloneLM BACKEND service.
-# Create a Railway service with Root Directory = "backend"; Railway reads this
-# file from that root. Nixpacks auto-detects the uv/Python project and installs
-# the DEFAULT dependencies (which include the lightweight `voyageai` client).
-# The heavy local bge-m3 stack lives in the opt-in `embeddings` extra and is
-# deliberately NOT installed here — the hosted build embeds via Voyage AI.
-[build]
-builder = "nixpacks"
+#
+# Set the service's Root Directory to "backend" in the Railway UI so this file is
+# detected and the Python/uv project is found here (not the monorepo root).
+#
+# No `builder` is set on purpose: Railway's default builder (Railpack) auto-detects
+# pyproject.toml + uv.lock and installs the DEFAULT dependencies (incl. the
+# lightweight `voyageai`). The heavy local bge-m3/torch stack lives in the opt-in
+# `embeddings` extra and is deliberately NOT installed here — the hosted build
+# embeds via Voyage AI. (Pinning builder = "nixpacks" fails on uv projects unless
+# $NIXPACKS_UV_VERSION is set; Railpack handles uv without that.)
 
 [deploy]
 # Apply DB migrations (creates the pgvector extension + schema, idempotent) on

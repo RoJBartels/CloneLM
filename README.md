@@ -155,7 +155,7 @@ SECRET_ENCRYPTION_KEY=...    # python -c "from cryptography.fernet import Fernet
 Security: passwords are **argon2id**-hashed; per-user API keys are **Fernet**-encrypted
 at rest (master key in env, decrypted in-memory per request, never returned). Auth is
 gated by `DEPLOYED`, so localhost stays single-user with no login. Full **Railway**
-walkthrough (two services via Nixpacks, no Docker) — [RAILWAY.md](RAILWAY.md).
+walkthrough (two services via Railpack, no Docker) — [RAILWAY.md](RAILWAY.md).
 
 ---
 
@@ -206,7 +206,7 @@ backend/
 frontend/              React + TS + Vite + Tailwind v4 (three-pane German UX; AuthView gate)
 design/                CloneLM-*.excalidraw (UI source of truth)
 docker-compose.yml     Postgres + pgvector
-railway.toml (×2)      backend/ + frontend/ Railway (Nixpacks) · RAILWAY.md deploy guide
+railway.toml (×2)      backend/ + frontend/ Railway (Railpack) · RAILWAY.md deploy guide
 ```
 
 ---
